@@ -1,0 +1,85 @@
+package config
+
+import (
+	"testing"
+	"time"
+)
+
+func TestLoadRequiresToken(t *testing.T) {
+	t.Setenv(envToken, "")
+	t.Setenv(envTokenAlt, "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() = nil error, want error about missing token")
+	}
+}
+
+func TestLoadParsesAdmins(t *testing.T) {
+	t.Setenv(envToken, "123:ABC")
+	t.Setenv(envAdmins, "42, 100 ,7")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.AdminCount() != 3 {
+		t.Fatalf("AdminCount = %d, want 3", cfg.AdminCount())
+	}
+	for _, id := range []int64{42, 100, 7} {
+		if !cfg.IsAdmin(id) {
+			t.Errorf("IsAdmin(%d) = false, want true", id)
+		}
+	}
+	if cfg.IsAdmin(999) {
+		t.Error("IsAdmin(999) = true, want false")
+	}
+}
+
+func TestLoadRejectsBadAdminID(t *testing.T) {
+	t.Setenv(envToken, "123:ABC")
+	t.Setenv(envAdmins, "not-a-number")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() = nil error, want parse error")
+	}
+}
+
+func TestLoadAcceptsLegacyTokenName(t *testing.T) {
+	t.Setenv(envToken, "")
+	t.Setenv(envTokenAlt, "legacy-token")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Token != "legacy-token" {
+		t.Errorf("Token = %q, want legacy-token", cfg.Token)
+	}
+}
+
+func TestBroadcastDelayFloor(t *testing.T) {
+	t.Setenv(envToken, "123:ABC")
+	t.Setenv(envAdmins, "")
+	t.Setenv(envDelayMS, "1") // слишком быстро для Telegram
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BroadcastDelay < 50*time.Millisecond {
+		t.Errorf("BroadcastDelay = %v, want at least 50ms", cfg.BroadcastDelay)
+	}
+}
+
+func TestDataFileDefault(t *testing.T) {
+	t.Setenv(envToken, "123:ABC")
+	t.Setenv(envDataFile, "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.DataFile != defaultDataFile {
+		t.Errorf("DataFile = %q, want %q", cfg.DataFile, defaultDataFile)
+	}
+}

@@ -1,0 +1,28 @@
+# Запуск бота с сохранением данных между перезапусками.
+services:
+  bot:
+    build: .
+    image: rest-test-bot:latest
+    container_name: rest-test-bot
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      # Путь внутри контейнера; том монтируется ниже.
+      DATA_FILE: /app/data/users.json
+      BROADCAST_DELAY_MS: "60"
+
+    volumes:
+      - ./data:/app/data
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Бот работает по long-polling: входящие порты не нужны.
+    security_opt:
+      - no-new-privileges:true
