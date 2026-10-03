@@ -4,6 +4,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -85,6 +86,11 @@ func (s *Store) MarkOptIn(id int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.optIn[id] = true
+	// Сохраняем отметку на диск, иначе после перезапуска «все, кто прошёл тест»
+	// обнулится и рассылка не дойдёт до отказавшихся от сохранения профиля.
+	if err := s.persistLocked(); err != nil {
+		log.Printf("[store] не удалось сохранить отметку участия %d: %v", id, err)
+	}
 }
 
 // Get возвращает копию профиля по Telegram ID.

@@ -86,6 +86,11 @@ var TieCopy = TieResultCopy{
 // InsufficientCopy — текст, когда отвечено меньше трёх вопросов.
 const InsufficientCopy = "Ответов пока недостаточно, чтобы выделить тенденцию. Ответьте хотя бы на три вопроса из пяти — и я соберу результат."
 
-// PracticeURL — ссылка на бесплатную аудиопрактику «Переключатель».
-// Замените на реальный адрес страницы практики.
-const PracticeURL = "https://example.com/perekluchatel"
+// DefaultPracticeURL — ссылка на бесплатную аудиопрактику «Переключатель» по умолчанию.
+// Можно переопределить без пересборки: задайте переменную окружения PRACTICE_URL
+// (например, в файле .env: PRACTICE_URL=https://ваша-ссылка).
+const DefaultPracticeURL = "https://t.me/restquiz_bot/practice"
+
+// PracticeURL — фактическая ссылка на практику; заполняется из конфигурации
+// при запуске бота (см. cmd/bot/main.go). До инициализации содержит значение по умолчанию.
+var PracticeURL = DefaultPracticeURL

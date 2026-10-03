@@ -25,6 +25,9 @@ const (
 	// (getUpdates). Иначе Telegram отвечает «Conflict: can't use getUpdates
 	// method while webhook is active».
 	envWebhook = "WEBHOOK_URL"
+	// envPracticeURL — ссылка на бесплатную аудиопрактику «Переключатель».
+	// Если не задана, используется значение по умолчанию из internal/quiz.
+	envPracticeURL = "PRACTICE_URL"
 
 	defaultDataFile = "data/users.json"
 	defaultDelayMS  = 60
@@ -43,6 +46,8 @@ type Config struct {
 	// WebhookURL — пустая строка означает «работать через long polling и
 	// удалить активный вебхук при старте».
 	WebhookURL string
+	// PracticeURL — ссылка на аудиопрактику; пусто — значение по умолчанию из internal/quiz.
+	PracticeURL string
 }
 
 // Load собирает конфигурацию из окружения и проверяет обязательные поля.
@@ -51,9 +56,10 @@ func Load() (*Config, error) {
 	loadDotEnv()
 
 	cfg := &Config{
-		Token:      firstNonEmpty(os.Getenv(envToken), os.Getenv(envTokenAlt)),
-		AdminIDs:   make(map[int64]struct{}),
-		WebhookURL: firstNonEmpty(os.Getenv(envWebhook)),
+		Token:       firstNonEmpty(os.Getenv(envToken), os.Getenv(envTokenAlt)),
+		AdminIDs:    make(map[int64]struct{}),
+		WebhookURL:  firstNonEmpty(os.Getenv(envWebhook)),
+		PracticeURL: firstNonEmpty(os.Getenv(envPracticeURL)),
 	}
 
 	if strings.TrimSpace(cfg.Token) == "" {
