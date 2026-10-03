@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-	
+
+	"github.com/joho/godotenv"
 )
 
 const (
@@ -36,7 +38,10 @@ type Config struct {
 }
 
 // Load собирает конфигурацию из окружения и проверяет обязательные поля.
+// Файл .env загружается автоматически, поэтому «go run» работает без внешних обёрток.
 func Load() (*Config, error) {
+	loadDotEnv()
+
 	cfg := &Config{
 		Token:    firstNonEmpty(os.Getenv(envToken), os.Getenv(envTokenAlt)),
 		AdminIDs: make(map[int64]struct{}),
@@ -105,4 +110,56 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// loadDotEnv ищет файл .env рядом с запуском приложения и загружает его.
+// Уже установленные (непустые) переменные окружения имеют приоритет над значениями из файла.
+func loadDotEnv() {
+	for _, path := range dotenvCandidates() {
+		if applyDotEnv(path) {
+			return
+		}
+	}
+}
+
+// applyDotEnv читает указанный файл и выставляет переменные через os.Setenv.
+// Возвращает true, если файл найден и успешно разобран.
+func applyDotEnv(path string) bool {
+	values, err := godotenv.Read(path)
+	if err != nil {
+		return false
+	}
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.TrimSpace(os.Getenv(key)) != "" {
+			continue
+		}
+		// os.Setenv используется вместо godotenv.Load намеренно: в некоторых
+		// окружениях (например, при t.Setenv в тестах) Load не перезаписывает
+		// уже существующие пустые переменные.
+		os.Setenv(key, value)
+	}
+	return true
+}
+
+func dotenvCandidates() []string {
+	candidates := []string{".env"}
+
+	// Переменная ENV_FILE позволяет указать явный путь к файлу окружения.
+	if custom := strings.TrimSpace(os.Getenv("ENV_FILE")); custom != "" {
+		candidates = append([]string{custom}, candidates...)
+	}
+
+	// Если «go run cmd/bot/main.go» запускается из корня проекта, бинарник лежит во временной папке —
+	// добавляем текущую директорию процесса и её родителя на случай запуска из подпапки.
+	if exeDir, err := os.Executable(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(exeDir, ".env"),
+			filepath.Join(filepath.Dir(exeDir), ".env"),
+		)
+	}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(wd, ".env"))
+	}
+	return candidates
 }
