@@ -127,6 +127,7 @@ make docker-down   # остановка
 | `ADMIN_IDS` | нет | пусто | ID админов через запятую |
 | `DATA_FILE` | нет | `data/users.json` | путь к файлу профилей |
 | `BROADCAST_DELAY_MS` | нет | `60` | пауза между сообщениями рассылки |
+| `WEBHOOK_URL` | нет | пусто | если пусто — бот при старте вызывает `deleteWebhook` и работает через long polling (getUpdates). Укажите URL, чтобы использовать вебхук. |
 
 Принимается и старое имя `TELEGRAM_BOT_TOKEN` / `ADMIN_ID` — для совместимости.
 
