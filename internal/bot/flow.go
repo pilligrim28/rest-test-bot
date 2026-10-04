@@ -110,6 +110,7 @@ func (b *Bot) sendResult(id int64, outcome quiz.Outcome, send Sender) {
 		sb.WriteString("\n" + cp.PracticeNote + "\n\n")
 	}
 
+	photo := b.cfg.ResultTiePhoto
 	button := "Попробовать восьмиминутную практику"
 	footer := "Бесплатно · 8 минут · Без специальной подготовки"
 	if outcome.IsTie() {
@@ -121,7 +122,9 @@ func (b *Bot) sendResult(id int64, outcome quiz.Outcome, send Sender) {
 			writeCopy(quiz.Results[c])
 		}
 	} else {
-		cp := quiz.Results[outcome.Categories[0]]
+		cat := outcome.Categories[0]
+		photo = b.cfg.ResultPhoto(categoryIndex(cat) + 1)
+		cp := quiz.Results[cat]
 		sb.WriteString("🔎 *Ваш результат*\n\n")
 		writeCopy(cp)
 		button, footer = cp.ButtonLabel, cp.Footer
@@ -130,6 +133,7 @@ func (b *Bot) sendResult(id int64, outcome quiz.Outcome, send Sender) {
 
 	b.send(send, id, sb.String(), telegramapi.SendOptions{
 		Markdown:       true,
+		Photo:          photo,
 		InlineKeyboard: [][]string{{"🎧 " + button, callbackPractice}},
 	})
 }
@@ -166,4 +170,14 @@ func (b *Bot) deliverPractice(id int64, st *state, send Sender) {
 			{"✅ Да, присылайте", callbackSubYes},
 			{"Нет, спасибо", callbackSubNo},
 		}})
+}
+
+// categoryIndex — номер варианта ответа (0..2), соответствующего категории.
+func categoryIndex(c quiz.Category) int {
+	for i, cat := range quiz.AllCategories {
+		if cat == c {
+			return i
+		}
+	}
+	return -1
 }

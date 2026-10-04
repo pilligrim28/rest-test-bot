@@ -65,8 +65,13 @@
 |---|---|---|
 | Приветствие | `WELCOME_PHOTO` | `assets/welcome.png` |
 | Вопрос N (1–5) | `QUESTION_PHOTO_N` | `QUESTION_PHOTO`, затем `assets/question_N.jpg` или `.png` |
+| Результат: преобладает ответ 1 | `RESULT_PHOTO_1` | `assets/result_1.jpg` или `.png` |
+| Результат: преобладает ответ 2 | `RESULT_PHOTO_2` | `assets/result_2.jpg` или `.png` |
+| Результат: преобладает ответ 3 | `RESULT_PHOTO_3` | `assets/result_3.jpg` или `.png` |
+| Результат: равенство баллов | `RESULT_PHOTO_TIE` | `assets/result_tie.jpg` или `.png` |
 
-Проще всего положить файлы `assets/question_1.jpg` … `assets/question_5.jpg`: тогда настраивать ничего не нужно.
+Проще всего положить в `assets/` файлы `question_1.jpg` … `question_5.jpg` и `result_1.jpg`, `result_2.jpg`, `result_3.jpg`, `result_tie.jpg`: тогда настраивать ничего не нужно.
+Текст результата длиннее 1024 символов, поэтому картинка результата приходит отдельным сообщением прямо перед ним.
 Текст вопроса становится подписью к картинке; лимит подписи в Telegram — 1024 символа.
 Если картинка не отправилась, бот пришлёт вопрос обычным текстом.
 

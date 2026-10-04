@@ -409,3 +409,25 @@ func TestResubscribedUserResultUpdated(t *testing.T) {
 		t.Error("подписчику не нужно снова предлагать подписку")
 	}
 }
+
+func TestResultPhotos(t *testing.T) {
+	cases := []struct {
+		name    string
+		choices []int
+		want    string
+	}{
+		{"преобладает 1", []int{0, 0, 0, 1, 2}, "r1.jpg"},
+		{"преобладает 2", []int{1, 1, 1, 0, 2}, "r2.jpg"},
+		{"преобладает 3", []int{2, 2, 2, 0, 1}, "r3.jpg"},
+		{"равенство", []int{0, 0, 1, 1, 2}, "tie.jpg"},
+	}
+	for _, tc := range cases {
+		b, _, fs := newTestBot(t)
+		b.cfg.ResultPhotos = []string{"r1.jpg", "r2.jpg", "r3.jpg"}
+		b.cfg.ResultTiePhoto = "tie.jpg"
+		runQuiz(t, b, fs, 1, tc.choices)
+		if got := fs.last().opts.Photo; got != tc.want {
+			t.Errorf("%s: картинка %q, хотим %q", tc.name, got, tc.want)
+		}
+	}
+}

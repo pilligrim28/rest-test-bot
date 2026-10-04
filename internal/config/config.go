@@ -64,6 +64,10 @@ type Config struct {
 	WelcomePhoto string
 	// QuestionPhotos — картинки к вопросам: индекс 0 — вопрос 1. Пустая строка — без картинки.
 	QuestionPhotos []string
+	// ResultPhotos — картинки к результату: индекс 0 — преобладает ответ 1,
+	// 1 — ответ 2, 2 — ответ 3. ResultTiePhoto — при равенстве баллов.
+	ResultPhotos   []string
+	ResultTiePhoto string
 
 	// OperatorName, OperatorCity, OperatorContact, PolicyURL — реквизиты для текста согласия.
 	OperatorName    string
@@ -78,6 +82,14 @@ type Config struct {
 
 // QuestionCount — число вопросов, для которых ищутся картинки.
 const QuestionCount = 5
+
+// ResultPhoto возвращает картинку результата для варианта ответа n (1–3) или пустую строку.
+func (c *Config) ResultPhoto(n int) string {
+	if c == nil || n < 1 || n > len(c.ResultPhotos) {
+		return ""
+	}
+	return c.ResultPhotos[n-1]
+}
 
 // QuestionPhoto возвращает картинку для вопроса n (1-based) или пустую строку.
 func (c *Config) QuestionPhoto(n int) string {
@@ -136,6 +148,15 @@ func Load() (*Config, error) {
 			existingFile(fmt.Sprintf("assets/question_%d.jpg", i), fmt.Sprintf("assets/question_%d.png", i)),
 		)
 	}
+
+	cfg.ResultPhotos = make([]string, 3)
+	for i := 1; i <= 3; i++ {
+		cfg.ResultPhotos[i-1] = firstNonEmpty(
+			os.Getenv(fmt.Sprintf("RESULT_PHOTO_%d", i)),
+			existingFile(fmt.Sprintf("assets/result_%d.jpg", i), fmt.Sprintf("assets/result_%d.png", i)),
+		)
+	}
+	cfg.ResultTiePhoto = firstNonEmpty(os.Getenv("RESULT_PHOTO_TIE"), existingFile("assets/result_tie.jpg", "assets/result_tie.png"))
 
 	cfg.OperatorName = firstNonEmpty(os.Getenv("OPERATOR_NAME"))
 	cfg.OperatorCity = firstNonEmpty(os.Getenv("OPERATOR_CITY"))

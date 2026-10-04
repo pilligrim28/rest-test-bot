@@ -16,6 +16,22 @@ jobs:
           go-version: "1.22"
           cache: true
 
+      - name: Секреты и данные пользователей не в репозитории
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)\.env$|^data/' || true)
+          if [ -n "$bad" ]; then
+            echo "В репозиторий попали файлы, которых там быть не должно:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: Битые файлы-диффы
+        run: |
+          if grep -rlE '^(\+\+\+|---) .*\((原始|修改后)\)' --include='*.go' .; then
+            echo "В .go-файлах остались строки от diff"
+            exit 1
+          fi
+
       - name: Проверка форматирования
         run: |
           unformatted=$(gofmt -l .)
