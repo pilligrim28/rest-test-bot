@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/restquiz/rest-test-bot/internal/config"
-	"github.com/restquiz/rest-test-bot/internal/store"
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/config"
+	"github.com/pilligrim28/rest-test-bot/internal/store"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 // fakeSender собирает все исходящие сообщения.
@@ -392,4 +392,20 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("условие не выполнилось за 2 секунды")
+}
+
+func TestResubscribedUserResultUpdated(t *testing.T) {
+	b, st, fs := newTestBot(t)
+	const id int64 = 90
+	runQuiz(t, b, fs, id, []int{0, 0, 0, 0, 0})
+	subscribe(b, fs, id)
+	runQuiz(t, b, fs, id, []int{1, 1, 1, 1, 1})
+	b.HandleUpdate(cb(id, "practice"), fs.send)
+	p, _ := st.Get(id)
+	if p.Scores["B"] != 5 || p.Runs != 2 {
+		t.Fatalf("результат подписчика не обновился: %+v", p)
+	}
+	if strings.Contains(fs.last().text, "Присылать?") {
+		t.Error("подписчику не нужно снова предлагать подписку")
+	}
 }

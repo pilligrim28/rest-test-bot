@@ -8,6 +8,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -94,7 +95,25 @@ func (s *Store) IncTests() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.testsCompleted++
-	_ = s.persistLocked()
+	if err := s.persistLocked(); err != nil {
+		log.Printf("[store] не удалось сохранить счётчик тестов: %v", err)
+	}
+}
+
+// UpdateResult обновляет результат теста у существующего подписчика,
+// не трогая данные согласия. Возвращает false, если профиля нет.
+func (s *Store) UpdateResult(id int64, scores map[string]int, headline string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, ok := s.profiles[id]
+	if !ok {
+		return false, nil
+	}
+	p.Scores = scores
+	p.Headline = headline
+	p.Runs++
+	p.UpdatedAt = time.Now().UTC()
+	return true, s.persistLocked()
 }
 
 // TestsCompleted возвращает число завершённых тестов (без привязки к людям).

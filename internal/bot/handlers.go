@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 func (b *Bot) handleText(u telegramapi.Update, send Sender) {

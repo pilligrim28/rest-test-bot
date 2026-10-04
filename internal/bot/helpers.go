@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 func (b *Bot) send(send Sender, id int64, text string, opts telegramapi.SendOptions) {

@@ -7,9 +7,9 @@ import (
 	"log"
 	"strings"
 
-	"github.com/restquiz/rest-test-bot/internal/quiz"
-	"github.com/restquiz/rest-test-bot/internal/store"
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/quiz"
+	"github.com/pilligrim28/rest-test-bot/internal/store"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 func (b *Bot) fillConsent(text string) string {

@@ -1,4 +1,4 @@
-module github.com/restquiz/rest-test-bot
+module github.com/pilligrim28/rest-test-bot
 
 go 1.22
 

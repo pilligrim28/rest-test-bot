@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 func (b *Bot) adminStats(send Sender, id int64) {

@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/restquiz/rest-test-bot/internal/bot"
-	"github.com/restquiz/rest-test-bot/internal/config"
-	"github.com/restquiz/rest-test-bot/internal/quiz"
-	"github.com/restquiz/rest-test-bot/internal/store"
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/bot"
+	"github.com/pilligrim28/rest-test-bot/internal/config"
+	"github.com/pilligrim28/rest-test-bot/internal/quiz"
+	"github.com/pilligrim28/rest-test-bot/internal/store"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 func main() {

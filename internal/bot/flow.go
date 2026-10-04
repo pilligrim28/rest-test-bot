@@ -4,10 +4,11 @@ package bot
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
-	"github.com/restquiz/rest-test-bot/internal/quiz"
-	"github.com/restquiz/rest-test-bot/internal/telegramapi"
+	"github.com/pilligrim28/rest-test-bot/internal/quiz"
+	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
 
 const welcomeText = "*Тест «Что не даёт вам нормально отдыхать вечером?»*\n\n" +
@@ -143,8 +144,13 @@ func (b *Bot) deliverPractice(id int64, st *state, send Sender) {
 		b.reply(send, id, title+"\n\n"+quiz.PracticeURL)
 	}
 
-	// Уже подписан — повторно согласие не спрашиваем.
+	// Уже подписан — согласие повторно не спрашиваем, только обновляем результат.
 	if p, ok := b.store.Get(id); ok && p.Subscribed() {
+		if st != nil && st.headline != "" {
+			if _, err := b.store.UpdateResult(id, st.scores, st.headline); err != nil {
+				log.Printf("[bot] обновление результата %d: %v", id, err)
+			}
+		}
 		b.clearState(id)
 		return
 	}

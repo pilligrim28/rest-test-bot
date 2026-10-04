@@ -1,0 +1,5 @@
+# Единые переводы строк: иначе gofmt в CI ругается на файлы, сохранённые в Windows (CRLF).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mp3 binary
