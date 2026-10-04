@@ -25,6 +25,8 @@ RUN apk add --no-cache ca-certificates tzdata && \
 WORKDIR /app
 
 COPY --from=builder /out/bot /app/bot
+# Картинки приветствия и вопросов (assets/welcome.png, assets/question_N.jpg …).
+COPY assets /app/assets
 
 # Данные лежат в томе, чтобы переживали пересборку контейнера.
 RUN mkdir -p /app/data && chown -R app:app /app

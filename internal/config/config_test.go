@@ -85,25 +85,25 @@ func TestDataFileDefault(t *testing.T) {
 }
 
 func TestPracticeURLFromEnv(t *testing.T) {
-t.Setenv("BOT_TOKEN", "x")
-t.Setenv("PRACTICE_URL", "https://my-practice.example/audio")
-cfg, err := Load()
-if err != nil {
-t.Fatal(err)
-}
-if cfg.PracticeURL != "https://my-practice.example/audio" {
-t.Errorf("PracticeURL = %q", cfg.PracticeURL)
-}
+	t.Setenv("BOT_TOKEN", "x")
+	t.Setenv("PRACTICE_URL", "https://my-practice.example/audio")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PracticeURL != "https://my-practice.example/audio" {
+		t.Errorf("PracticeURL = %q", cfg.PracticeURL)
+	}
 }
 
 func TestPracticeURLEmptyByDefault(t *testing.T) {
-t.Setenv("BOT_TOKEN", "x")
-t.Setenv("PRACTICE_URL", "")
-cfg, err := Load()
-if err != nil {
-t.Fatal(err)
-}
-if cfg.PracticeURL != "" {
-t.Errorf("ожидал пусто, получено %q", cfg.PracticeURL)
-}
+	t.Setenv("BOT_TOKEN", "x")
+	t.Setenv("PRACTICE_URL", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PracticeURL != "" {
+		t.Errorf("ожидал пусто, получено %q", cfg.PracticeURL)
+	}
 }

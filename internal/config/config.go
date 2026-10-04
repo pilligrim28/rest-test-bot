@@ -31,6 +31,8 @@ const (
 
 	defaultDataFile = "data/users.json"
 	defaultDelayMS  = 60
+
+	defaultRetentionDays = 365
 )
 
 // Config — полная конфигурация приложения.
@@ -48,6 +50,35 @@ type Config struct {
 	WebhookURL string
 	// PracticeURL — ссылка на аудиопрактику; пусто — значение по умолчанию из internal/quiz.
 	PracticeURL string
+	// PracticeAudio — аудиофайл практики (путь, URL или file_id). Если задан,
+	// практика приходит прямо в чат и контакт для доставки не нужен.
+	PracticeAudio string
+
+	// WelcomePhoto — картинка к приветствию (путь, URL или file_id).
+	WelcomePhoto string
+	// QuestionPhotos — картинки к вопросам: индекс 0 — вопрос 1. Пустая строка — без картинки.
+	QuestionPhotos []string
+
+	// OperatorName, OperatorCity, OperatorContact, PolicyURL — реквизиты для текста согласия.
+	OperatorName    string
+	OperatorCity    string
+	OperatorContact string
+	PolicyURL       string
+	// CollectPhone — предлагать ли поделиться номером телефона.
+	CollectPhone bool
+	// Retention — срок хранения профиля с последнего обновления; 0 — бессрочно.
+	Retention time.Duration
+}
+
+// QuestionCount — число вопросов, для которых ищутся картинки.
+const QuestionCount = 5
+
+// QuestionPhoto возвращает картинку для вопроса n (1-based) или пустую строку.
+func (c *Config) QuestionPhoto(n int) string {
+	if c == nil || n < 1 || n > len(c.QuestionPhotos) {
+		return ""
+	}
+	return c.QuestionPhotos[n-1]
 }
 
 // Load собирает конфигурацию из окружения и проверяет обязательные поля.
@@ -80,6 +111,34 @@ func Load() (*Config, error) {
 	}
 
 	cfg.DataFile = firstNonEmpty(os.Getenv(envDataFile), defaultDataFile)
+
+	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"))
+	cfg.WelcomePhoto = firstNonEmpty(os.Getenv("WELCOME_PHOTO"), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))
+	common := firstNonEmpty(os.Getenv("QUESTION_PHOTO"))
+	cfg.QuestionPhotos = make([]string, QuestionCount)
+	for i := 1; i <= QuestionCount; i++ {
+		cfg.QuestionPhotos[i-1] = firstNonEmpty(
+			os.Getenv(fmt.Sprintf("QUESTION_PHOTO_%d", i)),
+			common,
+			existingFile(fmt.Sprintf("assets/question_%d.jpg", i), fmt.Sprintf("assets/question_%d.png", i)),
+		)
+	}
+
+	cfg.OperatorName = firstNonEmpty(os.Getenv("OPERATOR_NAME"))
+	cfg.OperatorCity = firstNonEmpty(os.Getenv("OPERATOR_CITY"))
+	cfg.OperatorContact = firstNonEmpty(os.Getenv("OPERATOR_CONTACT"))
+	cfg.PolicyURL = firstNonEmpty(os.Getenv("POLICY_URL"))
+	cfg.CollectPhone = parseBool(os.Getenv("COLLECT_PHONE"))
+
+	retentionDays := defaultRetentionDays
+	if raw := strings.TrimSpace(os.Getenv("DATA_RETENTION_DAYS")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 {
+			return nil, fmt.Errorf("некорректный DATA_RETENTION_DAYS %q", raw)
+		}
+		retentionDays = parsed
+	}
+	cfg.Retention = time.Duration(retentionDays) * 24 * time.Hour
 
 	delayMS := defaultDelayMS
 	if raw := strings.TrimSpace(os.Getenv(envDelayMS)); raw != "" {
@@ -116,6 +175,24 @@ func (c *Config) Validate() error {
 		return errors.New("не указан путь к файлу данных")
 	}
 	return nil
+}
+
+// existingFile возвращает первый существующий файл из списка или пустую строку.
+func existingFile(paths ...string) string {
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func parseBool(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "on", "да":
+		return true
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {

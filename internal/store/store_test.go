@@ -1,7 +1,9 @@
 package store
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -52,27 +54,60 @@ func TestSaveAndReload(t *testing.T) {
 	}
 }
 
-func TestOptInAndRecipients(t *testing.T) {
+func TestSubscribersAndCounter(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "users.json")
 	s, err := New(path)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	s.IncTests()
+	s.IncTests()
+	now := time.Now().UTC()
+	if err := s.Save(Profile{TelegramID: 100, ConsentVersion: "v", MarketingConsentAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Save(Profile{TelegramID: 200, ConsentVersion: "v"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Subscribers(); len(got) != 1 || got[0] != 100 {
+		t.Errorf("Subscribers = %v, want [100]", got)
+	}
+	reopened, _ := New(path)
+	if reopened.TestsCompleted() != 2 {
+		t.Errorf("TestsCompleted = %d, want 2", reopened.TestsCompleted())
+	}
+}
 
-	s.MarkOptIn(100) // прошёл тест, отказался от обработки
-	s.MarkOptIn(200) // прошёл тест, отказался
-	if err := s.Save(Profile{TelegramID: 100, Login: "@a"}); err != nil {
-		t.Fatalf("Save: %v", err)
+func TestLegacyFileMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "users.json")
+	legacy := `{"profiles":{"5":{"telegram_id":5,"login":"@old","consented_at":"2026-10-01T00:00:00Z","updated_at":"2026-10-01T00:00:00Z"}},"opted_in":[5,6,7]}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
 	}
+	s, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := s.Get(5)
+	if !ok || !p.Subscribed() || p.Username != "@old" {
+		t.Fatalf("старый профиль не перенесён: %+v", p)
+	}
+	s.IncTests() // перезапись файла
+	data, _ := os.ReadFile(path)
+	if strings.Contains(string(data), "opted_in") {
+		t.Error("ID отказавшихся (opted_in) не должны оставаться в файле")
+	}
+}
 
-	if got := len(s.Recipients()); got != 2 {
-		t.Errorf("Recipients = %d, want 2", got)
+func TestPurge(t *testing.T) {
+	s, _ := New(filepath.Join(t.TempDir(), "users.json"))
+	_ = s.Save(Profile{TelegramID: 1})
+	if n, _ := s.Purge(time.Hour); n != 0 {
+		t.Errorf("свежий профиль удалён")
 	}
-	if got := len(s.ConsentedRecipients()); got != 1 {
-		t.Errorf("ConsentedRecipients = %d, want 1", got)
-	}
-	if s.Count() != 1 {
-		t.Errorf("Count = %d, want 1", s.Count())
+	s.profiles[1].UpdatedAt = time.Now().Add(-2 * time.Hour)
+	if n, _ := s.Purge(time.Hour); n != 1 || s.Count() != 0 {
+		t.Errorf("просроченный профиль не удалён")
 	}
 }
 

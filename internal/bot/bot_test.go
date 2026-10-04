@@ -69,11 +69,11 @@ func newTestBot(t *testing.T) (*Bot, *store.Store, *fakeSender) {
 }
 
 func text(id int64, s string) telegramapi.Update {
-	return telegramapi.Update{SenderID: id, SenderName: "Тест (@test)", Text: s}
+	return telegramapi.Update{SenderID: id, SenderName: "Тест (@test)", Username: "test", FirstName: "Тест", Text: s}
 }
 
 func cb(id int64, data string) telegramapi.Update {
-	return telegramapi.Update{SenderID: id, SenderName: "Тест (@test)", Callback: data}
+	return telegramapi.Update{SenderID: id, SenderName: "Тест (@test)", Username: "test", FirstName: "Тест", Callback: data}
 }
 
 // runQuiz отвечает на все 5 вопросов через inline-кнопки с указанными вариантами.
@@ -86,8 +86,10 @@ func runQuiz(t *testing.T, b *Bot, fs *fakeSender, id int64, choices []int) {
 		// находим callback кнопки выбранного варианта в текущем вопросе
 		var data string
 		for _, row := range last.opts.InlineKeyboard {
-			if strings.HasPrefix(row[1], "q:") && strings.HasSuffix(row[1], ":"+string(rune('0'+choice))) {
-				data = row[1]
+			for j := 1; j < len(row); j += 2 {
+				if strings.HasPrefix(row[j], "q:") && strings.HasSuffix(row[j], ":"+string(rune('0'+choice))) {
+					data = row[j]
+				}
 			}
 		}
 		if data == "" {
@@ -98,52 +100,68 @@ func runQuiz(t *testing.T, b *Bot, fs *fakeSender, id int64, choices []int) {
 	}
 }
 
+// subscribe проходит сценарий «практика → подписка → согласие».
+func subscribe(b *Bot, fs *fakeSender, id int64) {
+	b.HandleUpdate(cb(id, "practice"), fs.send)
+	b.HandleUpdate(cb(id, "sub_yes"), fs.send)
+	b.HandleUpdate(cb(id, "pd_yes"), fs.send)
+}
+
 func TestFullQuizConsentFlow(t *testing.T) {
 	b, st, fs := newTestBot(t)
 	const id int64 = 42
 
 	runQuiz(t, b, fs, id, []int{0, 0, 0, 1, 2}) // категория A побеждает (3 балла)
 
-	// Последнее сообщение — запрос согласия с двумя кнопками.
+	// После результата никаких данных не запрашиваем — только кнопка практики.
 	last := fs.last()
-	if !strings.Contains(last.text, "Согласен") {
-		t.Fatalf("ожидал запрос согласия, получил: %q", last.text)
+	if !strings.Contains(last.text, "Ваш результат") || last.opts.InlineKeyboard[0][1] != "practice" {
+		t.Fatalf("ожидал результат с кнопкой практики, получил: %q", last.text)
+	}
+	if st.TestsCompleted() != 1 {
+		t.Errorf("счётчик тестов = %d, хотим 1", st.TestsCompleted())
 	}
 
-	// Согласие → ожидание логина.
-	b.HandleUpdate(cb(id, "agree"), fs.send)
-	if !strings.Contains(fs.last().text, "Подтвердите") {
-		t.Fatalf("ожидал запрос логина, получил: %q", fs.last().text)
+	// Практика выдаётся без согласия, затем — предложение подписки.
+	b.HandleUpdate(cb(id, "practice"), fs.send)
+	if !strings.Contains(fs.sent[len(fs.sent)-2].text, "Переключатель") {
+		t.Fatalf("ожидал практику, получил %q", fs.sent[len(fs.sent)-2].text)
+	}
+	if !strings.Contains(fs.last().text, "Присылать?") {
+		t.Fatalf("ожидал предложение подписки, получил %q", fs.last().text)
+	}
+	if st.Count() != 0 {
+		t.Fatal("до согласия ничего сохраняться не должно")
 	}
 
-	// Ввод логина текстом → профиль сохранён.
-	b.HandleUpdate(text(id, "natulusik"), fs.send)
+	b.HandleUpdate(cb(id, "sub_yes"), fs.send)
+	if !strings.Contains(fs.last().text, "Согласие на обработку персональных данных") {
+		t.Fatalf("ожидал отдельное согласие на ПДн, получил %q", fs.last().text)
+	}
+	if st.Count() != 0 {
+		t.Fatal("одного согласия на рассылку недостаточно для сохранения")
+	}
+
+	b.HandleUpdate(cb(id, "pd_yes"), fs.send)
 	p, ok := st.Get(id)
 	if !ok {
-		t.Fatal("профиль не сохранён после подтверждения логина")
+		t.Fatal("профиль не сохранён после согласия")
 	}
-	if p.Login != "@natulusik" {
-		t.Errorf("логин = %q, хотим @natulusik", p.Login)
+	if p.Username != "@test" || p.FirstName != "Тест" {
+		t.Errorf("логин/имя = %q/%q", p.Username, p.FirstName)
+	}
+	if p.ConsentVersion == "" || p.ConsentMethod == "" || !p.Subscribed() {
+		t.Errorf("не сохранены доказательства согласия: %+v", p)
 	}
 	if p.Headline == "" {
 		t.Error("headline пуст")
 	}
-	if p.Runs != 1 {
-		t.Errorf("runs = %d, хотим 1", p.Runs)
+
+	b.HandleUpdate(text(id, "/mydata"), fs.send)
+	if !strings.Contains(fs.last().text, "Telegram ID: 42") {
+		t.Errorf("/mydata ответил некорректно: %q", fs.last().text)
 	}
 
-	// /mystats показывает результат.
-	before := fs.countTo(id)
-	b.HandleUpdate(text(id, "/mystats"), fs.send)
-	got := fs.last()
-	if got.chatID != id || !strings.Contains(got.text, "Прохождений: 1") {
-		t.Errorf("/mystats ответил некорректно: %q", got.text)
-	}
-	if fs.countTo(id) != before+1 {
-		t.Error("ожидала ровно один ответ на /mystats")
-	}
-
-	// /forget удаляет данные.
 	b.HandleUpdate(text(id, "/forget"), fs.send)
 	if _, ok := st.Get(id); ok {
 		t.Error("профиль должен быть удалён после /forget")
@@ -151,18 +169,95 @@ func TestFullQuizConsentFlow(t *testing.T) {
 }
 
 func TestDeclineKeepsNoProfile(t *testing.T) {
+	for _, decline := range []string{"sub_no", "pd_no"} {
+		b, st, fs := newTestBot(t)
+		const id int64 = 7
+		runQuiz(t, b, fs, id, []int{1, 1, 1, 1, 1})
+		b.HandleUpdate(cb(id, "practice"), fs.send)
+		if decline == "pd_no" {
+			b.HandleUpdate(cb(id, "sub_yes"), fs.send)
+		}
+		b.HandleUpdate(cb(id, decline), fs.send)
+		if st.Count() != 0 || len(st.Subscribers()) != 0 {
+			t.Errorf("%s: после отказа ничего сохраняться не должно", decline)
+		}
+	}
+}
+
+func TestPDConsentWithoutMarketingIgnored(t *testing.T) {
 	b, st, fs := newTestBot(t)
-	const id int64 = 7
-
-	runQuiz(t, b, fs, id, []int{1, 1, 1, 1, 1})
-
-	b.HandleUpdate(cb(id, "decline"), fs.send)
-	if _, ok := st.Get(id); ok {
-		t.Error("после отказа профиль создаваться не должен")
+	runQuiz(t, b, fs, 3, []int{0, 0, 0, 0, 0})
+	b.HandleUpdate(cb(3, "pd_yes"), fs.send) // в обход шага подписки
+	if st.Count() != 0 {
+		t.Error("без согласия на рассылку профиль сохраняться не должен")
 	}
-	if n := len(st.Recipients()); n != 1 {
-		t.Errorf("отметка об участии должна остаться, recipients = %d", n)
+}
+
+func TestPhoneCollection(t *testing.T) {
+	b, st, fs := newTestBot(t)
+	b.cfg.CollectPhone = true
+	const id int64 = 77
+	runQuiz(t, b, fs, id, []int{2, 2, 2, 0, 1})
+	subscribe(b, fs, id)
+	if fs.last().opts.RequestContact == "" {
+		t.Fatalf("ожидал кнопку «Поделиться номером», получил %+v", fs.last())
 	}
+	if st.Count() != 0 {
+		t.Fatal("до ответа на запрос номера профиль не сохраняется")
+	}
+
+	// Чужой контакт не принимаем.
+	b.HandleUpdate(telegramapi.Update{SenderID: id, Contact: &telegramapi.Contact{Phone: "79990000000", UserID: 1}}, fs.send)
+	if st.Count() != 0 {
+		t.Fatal("чужой номер сохраняться не должен")
+	}
+
+	b.HandleUpdate(telegramapi.Update{SenderID: id, Username: "u", Contact: &telegramapi.Contact{Phone: "79991112233", UserID: id}}, fs.send)
+	p, ok := st.Get(id)
+	if !ok || p.Phone != "+79991112233" {
+		t.Fatalf("номер не сохранён: %+v", p)
+	}
+}
+
+func TestPhoneSkip(t *testing.T) {
+	b, st, fs := newTestBot(t)
+	b.cfg.CollectPhone = true
+	runQuiz(t, b, fs, 78, []int{2, 2, 2, 0, 1})
+	subscribe(b, fs, 78)
+	b.HandleUpdate(text(78, "Пропустить"), fs.send)
+	if p, ok := st.Get(78); !ok || p.Phone != "" {
+		t.Fatalf("ожидал профиль без телефона, получил %+v, %v", p, ok)
+	}
+}
+
+func TestPhotosAttached(t *testing.T) {
+	b, _, fs := newTestBot(t)
+	b.cfg.WelcomePhoto = "welcome.png"
+	b.cfg.QuestionPhotos = []string{"q1.jpg", "q2.jpg", "q3.jpg", "q4.jpg", "q5.jpg"}
+	b.HandleUpdate(text(1, "/start"), fs.send)
+	if fs.last().opts.Photo != "welcome.png" {
+		t.Errorf("приветствие без картинки: %+v", fs.last().opts)
+	}
+	b.HandleUpdate(cb(1, "start_test"), fs.send)
+	for q := 1; q <= 5; q++ {
+		want := b.cfg.QuestionPhotos[q-1]
+		if got := fs.last().opts.Photo; got != want {
+			t.Errorf("вопрос %d: картинка %q, хотим %q", q, got, want)
+		}
+		if !strings.Contains(fs.last().text, "Вопрос ") {
+			t.Errorf("вопрос %d: нет индикатора прогресса", q)
+		}
+		if q < 5 {
+			b.HandleUpdate(cb(1, "skip"), fs.send)
+		}
+	}
+}
+
+func TestMalformedCallbackDoesNotPanic(t *testing.T) {
+	b, _, fs := newTestBot(t)
+	b.HandleUpdate(cb(1, "q:5"), fs.send)
+	b.HandleUpdate(cb(1, "q:"), fs.send)
+	b.HandleUpdate(cb(1, "agree"), fs.send)
 }
 
 func TestInsufficientAnswers(t *testing.T) {
@@ -193,15 +288,12 @@ func TestTextAnswersSupported(t *testing.T) {
 	b.HandleUpdate(text(id, "Пропустить"), fs.send)
 	b.HandleUpdate(text(id, "3"), fs.send)
 
-	// Результат + согласие: последние два сообщения.
-	texts := fs.sent[len(fs.sent)-2:]
-	if !strings.Contains(texts[0].text, "Ваш результат") {
-		t.Errorf("ожидал результат теста, получил %q", texts[0].text)
+	if !strings.Contains(fs.last().text, "Ваш результат") {
+		t.Errorf("ожидал результат теста, получил %q", fs.last().text)
 	}
-	if !strings.Contains(texts[1].text, "Согласен") {
-		t.Errorf("ожидал запрос согласия, получил %q", texts[1].text)
+	if st.Count() != 0 {
+		t.Error("результат не должен требовать сохранения данных")
 	}
-	_ = st
 }
 
 func TestTieShowsBothCategories(t *testing.T) {
@@ -216,7 +308,7 @@ func TestTieShowsBothCategories(t *testing.T) {
 	b.HandleUpdate(cb(id, "q:4:1"), fs.send)
 	b.HandleUpdate(cb(id, "skip"), fs.send)
 
-	resultMsg := fs.sent[len(fs.sent)-2].text
+	resultMsg := fs.last().text
 	if !strings.Contains(resultMsg, "две привычки") {
 		t.Errorf("ожидал текст про две привычки, получил %q", resultMsg)
 	}
@@ -229,7 +321,7 @@ func TestAdminCommandsAndBroadcast(t *testing.T) {
 
 	// Не-админ не получает админ-команды.
 	b.HandleUpdate(text(user, "/stats"), fs.send)
-	if strings.Contains(fs.last().text, "Профилей с согласием") {
+	if strings.Contains(fs.last().text, "Подписчиков") {
 		t.Error("/stats не должен работать для не-админа")
 	}
 
@@ -239,17 +331,21 @@ func TestAdminCommandsAndBroadcast(t *testing.T) {
 		t.Errorf("ожидал админ-справку, получил %q", fs.last().text)
 	}
 	b.HandleUpdate(text(admin, "/stats"), fs.send)
-	if !strings.Contains(fs.last().text, "Профилей с согласием: 0") {
+	if !strings.Contains(fs.last().text, "Подписчиков с согласием: 0") {
 		t.Errorf("ожидал нулевую статистику, получил %q", fs.last().text)
 	}
 
 	// Создадим профиль вручную и запустим рассылку.
-	if err := st.Save(store.Profile{TelegramID: user, Login: "@user", Username: "@user", Headline: "X"}); err != nil {
+	now := time.Now().UTC()
+	if err := st.Save(store.Profile{TelegramID: user, Username: "@user", Headline: "X", ConsentVersion: "v", MarketingConsentAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	// Дал согласие на ПДн, но не на рассылку — получать не должен.
+	if err := st.Save(store.Profile{TelegramID: 333, ConsentVersion: "v"}); err != nil {
 		t.Fatal(err)
 	}
 
 	b.HandleUpdate(text(admin, "/broadcast"), fs.send)
-	b.HandleUpdate(cb(admin, "bc:bc_all_consent"), fs.send)
 	b.HandleUpdate(text(admin, "Привет, это рассылка!"), fs.send)
 
 	if !strings.Contains(fs.last().text, "Предпросмотр") {
@@ -262,6 +358,9 @@ func TestAdminCommandsAndBroadcast(t *testing.T) {
 		last := fs.last()
 		return last.chatID == admin && strings.Contains(last.text, "Рассылка завершена")
 	})
+	if fs.countTo(333) != 0 {
+		t.Error("рассылка ушла пользователю без согласия на рассылку")
+	}
 	if !strings.Contains(fs.last().text, "доставлено 1") {
 		t.Errorf("ожидал «доставлено 1», получил %q", fs.last().text)
 	}

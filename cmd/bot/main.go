@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/restquiz/rest-test-bot/internal/bot"
 	"github.com/restquiz/rest-test-bot/internal/config"
@@ -38,6 +39,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("[restquiz] хранилище: %v", err)
 	}
+
+	// Автоудаление профилей по истечении срока хранения (ст. 5 152-ФЗ).
+	purge := func() {
+		if n, err := st.Purge(cfg.Retention); err != nil {
+			log.Printf("[restquiz] автоудаление: %v", err)
+		} else if n > 0 {
+			log.Printf("[restquiz] удалено профилей с истёкшим сроком хранения: %d", n)
+		}
+	}
+	purge()
+	go func() {
+		for range time.Tick(24 * time.Hour) {
+			purge()
+		}
+	}()
 
 	b := bot.New(cfg, st, api)
 	send := api.Send
