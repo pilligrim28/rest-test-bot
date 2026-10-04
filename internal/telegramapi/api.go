@@ -135,6 +135,9 @@ func (a *API) Send(chatID int64, text string, opts SendOptions) error {
 			mediaMarkup = markup
 		}
 		err := a.sendMedia(chatID, media, opts.Audio != "", caption, parseMode, mediaMarkup)
+		if err != nil && parseMode != "" && isParseError(err) {
+			err = a.sendMedia(chatID, media, opts.Audio != "", caption, "", mediaMarkup)
+		}
 		if err != nil {
 			log.Printf("[telegram] не удалось отправить медиа %q: %v — отправляю текстом", media, err)
 		} else if withCaption || text == "" {
@@ -149,7 +152,18 @@ func (a *API) Send(chatID int64, text string, opts SendOptions) error {
 		msg.ReplyMarkup = markup
 	}
 	_, err := a.bot.Send(msg)
+	if err != nil && parseMode != "" && isParseError(err) {
+		// Текст не прошёл разметку Markdown — отправляем как есть, без форматирования.
+		log.Printf("[telegram] ошибка разметки Markdown, отправляю без форматирования: %v", err)
+		msg.ParseMode = ""
+		_, err = a.bot.Send(msg)
+	}
 	return err
+}
+
+// isParseError — Telegram отклонил разметку (непарные * или _ и т. п.).
+func isParseError(err error) bool {
+	return strings.Contains(err.Error(), "can't parse entities")
 }
 
 func buildMarkup(opts SendOptions) interface{} {

@@ -48,6 +48,12 @@ type Config struct {
 	// WebhookURL — пустая строка означает «работать через long polling и
 	// удалить активный вебхук при старте».
 	WebhookURL string
+	// WebhookListen — адрес HTTP-сервера вебхука (по умолчанию :8080).
+	WebhookListen string
+	// WebhookPath — путь, на который Telegram шлёт обновления.
+	WebhookPath string
+	// WebhookSecret — секрет для заголовка X-Telegram-Bot-Api-Secret-Token.
+	WebhookSecret string
 	// PracticeURL — ссылка на аудиопрактику; пусто — значение по умолчанию из internal/quiz.
 	PracticeURL string
 	// PracticeAudio — аудиофайл практики (путь, URL или file_id). Если задан,
@@ -111,6 +117,13 @@ func Load() (*Config, error) {
 	}
 
 	cfg.DataFile = firstNonEmpty(os.Getenv(envDataFile), defaultDataFile)
+
+	cfg.WebhookListen = firstNonEmpty(os.Getenv("WEBHOOK_LISTEN"), ":8080")
+	cfg.WebhookPath = firstNonEmpty(os.Getenv("WEBHOOK_PATH"), "/telegram/webhook")
+	cfg.WebhookSecret = firstNonEmpty(os.Getenv("WEBHOOK_SECRET"))
+	if cfg.WebhookURL != "" && cfg.WebhookSecret == "" {
+		return nil, errors.New("для режима вебхука задайте WEBHOOK_SECRET (латиница, цифры, _ и -, до 256 символов)")
+	}
 
 	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"))
 	cfg.WelcomePhoto = firstNonEmpty(os.Getenv("WELCOME_PHOTO"), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))

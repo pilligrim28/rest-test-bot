@@ -58,17 +58,30 @@ func main() {
 	b := bot.New(cfg, st, api)
 	send := api.Send
 
-	updates := make(chan telegramapi.Update)
+	updates := make(chan telegramapi.Update, 100)
 	stop := make(chan struct{})
 
+	go func() {
+		for u := range updates {
+			b.HandleUpdate(u, send)
+		}
+	}()
+
 	if cfg.WebhookURL != "" {
-		// Режим вебхука: URL должен указывать на HTTPS-эндпоинт бэкенда.
-		if err := api.SetWebhook(cfg.WebhookURL); err != nil {
+		// Режим вебхука: HTTPS терминирует обратный прокси (nginx/Caddy),
+		// бот слушает HTTP на WEBHOOK_LISTEN.
+		if err := api.SetWebhookWithSecret(cfg.WebhookURL, cfg.WebhookSecret); err != nil {
 			log.Fatalf("[restquiz] setWebhook: %v", err)
 		}
-		log.Printf("[restquiz] вебхук установлен: %s (для локального тестирования уберите WEBHOOK_URL)", cfg.WebhookURL)
-		log.Printf("[restquiz] режим webhook: обновления принимает HTTP-сервер, запуск long polling отменён")
-		waitSignal()
+		go func() {
+			if err := telegramapi.ServeWebhook(cfg.WebhookListen, cfg.WebhookPath, cfg.WebhookSecret, updates, stop); err != nil {
+				log.Fatalf("[restquiz] сервер вебхука: %v", err)
+			}
+		}()
+		log.Printf("[restquiz] режим webhook: %s, слушаю %s%s", cfg.WebhookURL, cfg.WebhookListen, cfg.WebhookPath)
+		sig := waitSignal()
+		log.Printf("[restquiz] получен сигнал %s, останавливаюсь…", sig)
+		close(stop)
 		return
 	}
 
@@ -77,16 +90,9 @@ func main() {
 	if err := api.EnsureNoWebhook(); err != nil {
 		log.Printf("[restquiz] deleteWebhook: %v (продолжаю, poller починит конфликт сам)", err)
 	}
-
 	go api.PollUpdates(updates, stop)
 
-	go func() {
-		for u := range updates {
-			b.HandleUpdate(u, send)
-		}
-	}()
-
-	log.Printf("[restquiz] бот запущен как @%s, админов: %d, профилей: %d",
+	log.Printf("[restquiz] бот запущен как @%s (long polling), админов: %d, профилей: %d",
 		api.BotUsername(), cfg.AdminCount(), st.Count())
 
 	sig := waitSignal()

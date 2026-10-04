@@ -23,6 +23,9 @@ services:
         max-size: "10m"
         max-file: "3"
 
-    # Бот работает по long-polling: входящие порты не нужны.
+    # По умолчанию long polling — входящие порты не нужны.
+    # Для режима вебхука раскомментируйте и поставьте перед ботом HTTPS-прокси:
+    # ports:
+    #   - "127.0.0.1:8080:8080"
     security_opt:
       - no-new-privileges:true
