@@ -137,7 +137,8 @@ func Load() (*Config, error) {
 		return nil, errors.New("для режима вебхука задайте WEBHOOK_SECRET (латиница, цифры, _ и -, до 256 символов)")
 	}
 
-	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"))
+	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"),
+		existingFile("assets/practice.mp3", "assets/practice.m4a", "assets/practice.ogg"))
 	cfg.WelcomePhoto = firstNonEmpty(os.Getenv("WELCOME_PHOTO"), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))
 	common := firstNonEmpty(os.Getenv("QUESTION_PHOTO"))
 	cfg.QuestionPhotos = make([]string, QuestionCount)

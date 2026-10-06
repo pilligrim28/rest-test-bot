@@ -327,7 +327,7 @@ func TestAdminCommandsAndBroadcast(t *testing.T) {
 
 	// Админ: справка, статистика, список.
 	b.HandleUpdate(text(admin, "/admin"), fs.send)
-	if !strings.Contains(fs.last().text, "Админ-команды") {
+	if !strings.Contains(fs.last().text, "Команды администратора") {
 		t.Errorf("ожидал админ-справку, получил %q", fs.last().text)
 	}
 	b.HandleUpdate(text(admin, "/stats"), fs.send)
@@ -429,5 +429,63 @@ func TestResultPhotos(t *testing.T) {
 		if got := fs.last().opts.Photo; got != tc.want {
 			t.Errorf("%s: картинка %q, хотим %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func hasCallback(m msg, data string) bool {
+	for _, row := range m.opts.InlineKeyboard {
+		for j := 1; j < len(row); j += 2 {
+			if row[j] == data {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestButtonsLayout(t *testing.T) {
+	b, _, fs := newTestBot(t)
+	b.HandleUpdate(text(1, "/start"), fs.send)
+	if hasCallback(fs.last(), "consent_info") {
+		t.Error("на приветствии не должно быть кнопки про данные")
+	}
+	b.HandleUpdate(cb(1, "start_test"), fs.send)
+	if hasCallback(fs.last(), "skip") {
+		t.Error("кнопки «Ничего из этого» быть не должно")
+	}
+	runQuiz(t, b, fs, 1, []int{2, 2, 2, 0, 1})
+	b.HandleUpdate(cb(1, "practice"), fs.send)
+	if !hasCallback(fs.last(), "consent_info") {
+		t.Error("на последнем экране должна быть кнопка «Как я обращаюсь с данными»")
+	}
+}
+
+func TestPracticeAudioSent(t *testing.T) {
+	b, _, fs := newTestBot(t)
+	b.cfg.PracticeAudio = "practice.mp3"
+	runQuiz(t, b, fs, 1, []int{2, 2, 2, 0, 1}) // результат «Начать свою паузу сейчас»
+	if !strings.Contains(fs.last().opts.InlineKeyboard[0][0], "Начать свою паузу сейчас") {
+		t.Fatalf("ожидал кнопку «Начать свою паузу сейчас», получил %v", fs.last().opts.InlineKeyboard)
+	}
+	b.HandleUpdate(cb(1, "practice"), fs.send)
+	audio := fs.sent[len(fs.sent)-2]
+	if audio.opts.Audio != "practice.mp3" || audio.opts.AudioTitle == "" {
+		t.Fatalf("аудио не отправлено: %+v", audio.opts)
+	}
+}
+
+func TestHelpSeparatesAdmin(t *testing.T) {
+	b, _, fs := newTestBot(t)
+	b.HandleUpdate(text(222, "/help"), fs.send)
+	if strings.Contains(fs.last().text, "/broadcast") {
+		t.Error("пользователь не должен видеть админ-команды")
+	}
+	b.HandleUpdate(text(111, "/help"), fs.send)
+	if !strings.Contains(fs.last().text, "/broadcast") {
+		t.Error("админ должен видеть админ-команды")
+	}
+	b.HandleUpdate(text(222, "/broadcast"), fs.send)
+	if strings.Contains(fs.last().text, "Рассылка") {
+		t.Error("пользователь не должен запускать рассылку")
 	}
 }

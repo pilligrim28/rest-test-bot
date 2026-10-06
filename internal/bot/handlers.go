@@ -61,7 +61,7 @@ func (b *Bot) handleText(u telegramapi.Update, send Sender) {
 	case b.cfg.IsAdmin(u.SenderID) && isCommand:
 		switch {
 		case strings.HasPrefix(lower, "/admin"):
-			b.reply(send, u.SenderID, adminHelpText)
+			b.reply(send, u.SenderID, adminHelpText())
 		case strings.HasPrefix(lower, "/stats"):
 			b.adminStats(send, u.SenderID)
 		case strings.HasPrefix(lower, "/users"):

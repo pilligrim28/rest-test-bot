@@ -26,7 +26,6 @@ func (b *Bot) sendWelcome(id int64, send Sender) {
 		Photo:    b.cfg.WelcomePhoto,
 		InlineKeyboard: [][]string{
 			{"Узнать, что мешает мне отдыхать", callbackStart},
-			{"🔒 Как я обращаюсь с данными", callbackConsentInfo},
 		},
 	}
 	b.send(send, id, welcomeText, opts)
@@ -54,7 +53,7 @@ func (b *Bot) askQuestion(id int64, st *state, send Sender) {
 	for i := range q.Options {
 		answerRow = append(answerRow, quiz.Label(i), fmt.Sprintf("q:%d:%d", q.Number, i))
 	}
-	rows = append(rows, answerRow, []string{"Ничего из этого / пропустить", callbackSkip})
+	rows = append(rows, answerRow)
 
 	b.send(send, id, strings.TrimSpace(sb.String()), telegramapi.SendOptions{
 		Markdown:       true,
@@ -143,7 +142,10 @@ func (b *Bot) sendResult(id int64, outcome quiz.Outcome, send Sender) {
 func (b *Bot) deliverPractice(id int64, st *state, send Sender) {
 	const title = "🎧 «Переключатель: 8 минут, чтобы перейти от дел к отдыху»"
 	if b.cfg.PracticeAudio != "" {
-		b.send(send, id, title+"\n\nУдобно сядьте и включите запись.", telegramapi.SendOptions{Audio: b.cfg.PracticeAudio})
+		b.send(send, id, title+"\n\nУдобно сядьте и включите запись.", telegramapi.SendOptions{
+			Audio:      b.cfg.PracticeAudio,
+			AudioTitle: "Переключатель: 8 минут, чтобы перейти от дел к отдыху",
+		})
 	} else {
 		b.reply(send, id, title+"\n\n"+quiz.PracticeURL)
 	}
@@ -169,6 +171,7 @@ func (b *Bot) deliverPractice(id int64, st *state, send Sender) {
 		telegramapi.SendOptions{InlineKeyboard: [][]string{
 			{"✅ Да, присылайте", callbackSubYes},
 			{"Нет, спасибо", callbackSubNo},
+			{"🔒 Как я обращаюсь с данными", callbackConsentInfo},
 		}})
 }
 

@@ -101,6 +101,38 @@ type SendOptions struct {
 	Photo string
 	// Audio — аудиофайл: путь к файлу, https-ссылка или file_id.
 	Audio string
+	// AudioTitle — название трека в плеере Telegram.
+	AudioTitle string
+}
+
+// Command — команда для меню бота.
+type Command struct {
+	Name        string
+	Description string
+}
+
+// SetCommands настраивает меню команд: пользователи видят только userCmds,
+// каждый администратор в своём чате — userCmds и adminCmds.
+func (a *API) SetCommands(userCmds, adminCmds []Command, adminIDs []int64) error {
+	toBot := func(cmds []Command) []tgbotapi.BotCommand {
+		out := make([]tgbotapi.BotCommand, 0, len(cmds))
+		for _, c := range cmds {
+			out = append(out, tgbotapi.BotCommand{Command: c.Name, Description: c.Description})
+		}
+		return out
+	}
+	users := toBot(userCmds)
+	if _, err := a.bot.Request(tgbotapi.NewSetMyCommandsWithScope(tgbotapi.NewBotCommandScopeDefault(), users...)); err != nil {
+		return fmt.Errorf("меню пользователей: %w", err)
+	}
+	all := append(append([]tgbotapi.BotCommand{}, users...), toBot(adminCmds)...)
+	for _, id := range adminIDs {
+		if _, err := a.bot.Request(tgbotapi.NewSetMyCommandsWithScope(tgbotapi.NewBotCommandScopeChat(id), all...)); err != nil {
+			// Чаще всего админ ещё не писал боту — меню появится после перезапуска.
+			log.Printf("[telegram] меню администратора %d: %v (напишите боту /start и перезапустите)", id, err)
+		}
+	}
+	return nil
 }
 
 // captionLimit — максимальная длина подписи к медиа в Telegram.
@@ -134,9 +166,9 @@ func (a *API) Send(chatID int64, text string, opts SendOptions) error {
 		if withCaption || text == "" {
 			mediaMarkup = markup
 		}
-		err := a.sendMedia(chatID, media, opts.Audio != "", caption, parseMode, mediaMarkup)
+		err := a.sendMedia(chatID, media, opts, caption, parseMode, mediaMarkup)
 		if err != nil && parseMode != "" && isParseError(err) {
-			err = a.sendMedia(chatID, media, opts.Audio != "", caption, "", mediaMarkup)
+			err = a.sendMedia(chatID, media, opts, caption, "", mediaMarkup)
 		}
 		if err != nil {
 			log.Printf("[telegram] не удалось отправить медиа %q: %v — отправляю текстом", media, err)
@@ -204,13 +236,15 @@ func buildMarkup(opts SendOptions) interface{} {
 
 // sendMedia отправляет фото или аудио. Локальный файл загружается один раз,
 // затем используется сохранённый file_id.
-func (a *API) sendMedia(chatID int64, source string, audio bool, caption, parseMode string, markup interface{}) error {
+func (a *API) sendMedia(chatID int64, source string, opts SendOptions, caption, parseMode string, markup interface{}) error {
+	audio := opts.Audio != ""
 	file, localPath := a.resolveFile(source)
 
 	var cfg tgbotapi.Chattable
 	if audio {
 		c := tgbotapi.NewAudio(chatID, file)
 		c.Caption, c.ParseMode = caption, parseMode
+		c.Title = opts.AudioTitle
 		if markup != nil {
 			c.ReplyMarkup = markup
 		}

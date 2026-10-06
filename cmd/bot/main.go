@@ -56,6 +56,18 @@ func main() {
 	}()
 
 	b := bot.New(cfg, st, api)
+
+	// Меню команд: пользователям — только пользовательские, админам — ещё и админские.
+	adminIDs := make([]int64, 0, cfg.AdminCount())
+	for id := range cfg.AdminIDs {
+		adminIDs = append(adminIDs, id)
+	}
+	if err := api.SetCommands(bot.UserCommands, bot.AdminCommands, adminIDs); err != nil {
+		log.Printf("[restquiz] не удалось настроить меню команд: %v", err)
+	}
+	if cfg.PracticeAudio == "" {
+		log.Printf("[restquiz] аудиопрактика не найдена: положите assets/practice.mp3 или задайте PRACTICE_AUDIO — пока отправляется ссылка PRACTICE_URL")
+	}
 	send := api.Send
 
 	updates := make(chan telegramapi.Update, 100)
