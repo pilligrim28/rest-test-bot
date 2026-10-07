@@ -468,9 +468,12 @@ func TestPracticeAudioSent(t *testing.T) {
 		t.Fatalf("ожидал кнопку «Начать свою паузу сейчас», получил %v", fs.last().opts.InlineKeyboard)
 	}
 	b.HandleUpdate(cb(1, "practice"), fs.send)
-	audio := fs.sent[len(fs.sent)-2]
-	if audio.opts.Audio != "practice.mp3" || audio.opts.AudioTitle == "" {
-		t.Fatalf("аудио не отправлено: %+v", audio.opts)
+	intro, audio := fs.sent[len(fs.sent)-3], fs.sent[len(fs.sent)-2]
+	if !strings.Contains(intro.text, "Переключатель") || intro.opts.Audio != "" {
+		t.Fatalf("перед аудио должен идти текст: %+v", intro)
+	}
+	if audio.opts.Audio != "practice.mp3" || audio.opts.AudioTitle == "" || audio.text != "" {
+		t.Fatalf("аудио должно идти отдельным сообщением без подписи: %+v", audio)
 	}
 }
 

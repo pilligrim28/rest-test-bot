@@ -68,7 +68,7 @@
 
 | Где показывается | Переменная | По умолчанию |
 |---|---|---|
-| Приветствие | `WELCOME_PHOTO` | `assets/welcome.png` |
+| Приветствие | `WELCOME_PHOTO` | `assets/welcome.jpg` |
 | Вопрос N (1–5) | `QUESTION_PHOTO_N` | `QUESTION_PHOTO`, затем `assets/question_N.jpg` или `.png` |
 | Результат: преобладает ответ 1 | `RESULT_PHOTO_1` | `assets/result_1.jpg` или `.png` |
 | Результат: преобладает ответ 2 | `RESULT_PHOTO_2` | `assets/result_2.jpg` или `.png` |

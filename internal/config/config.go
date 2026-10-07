@@ -139,7 +139,7 @@ func Load() (*Config, error) {
 
 	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"),
 		existingFile("assets/practice.mp3", "assets/practice.m4a", "assets/practice.ogg"))
-	cfg.WelcomePhoto = firstNonEmpty(os.Getenv("WELCOME_PHOTO"), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))
+	cfg.WelcomePhoto = firstNonEmpty(dropMissingAsset(os.Getenv("WELCOME_PHOTO")), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))
 	common := firstNonEmpty(os.Getenv("QUESTION_PHOTO"))
 	cfg.QuestionPhotos = make([]string, QuestionCount)
 	for i := 1; i <= QuestionCount; i++ {
@@ -220,6 +220,17 @@ func existingFile(paths ...string) string {
 		}
 	}
 	return ""
+}
+
+// dropMissingAsset возвращает "" для пути внутри assets/, если такого файла нет.
+// Так старое значение WELCOME_PHOTO=assets/welcome.png не ломает приветствие,
+// когда картинку заменили на assets/welcome.jpg.
+func dropMissingAsset(v string) string {
+	v = strings.TrimSpace(v)
+	if strings.HasPrefix(filepath.ToSlash(v), "assets/") && existingFile(v) == "" {
+		return ""
+	}
+	return v
 }
 
 func parseBool(raw string) bool {
