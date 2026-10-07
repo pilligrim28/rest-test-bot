@@ -11,11 +11,13 @@
 """
 import base64
 import json
+import os
 import subprocess
 import sys
 import time
 import urllib.parse
 import urllib.request
+import uuid
 
 CONFIG_PATH = "/usr/local/etc/xray/config.json"
 HTTP_PORT, SOCKS_PORT = 10809, 10808
@@ -28,8 +30,24 @@ def b64decode(s):
     return base64.b64decode(s).decode("utf-8", "replace")
 
 
+def hwid():
+    """Постоянный ID устройства: некоторые подписки (Remnawave) без заголовка
+    x-hwid отдают заглушку «Устройство не поддерживается»."""
+    for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+        try:
+            with open(path) as f:
+                v = f.read().strip()
+            if v:
+                return "srv-" + v[:24]
+        except OSError:
+            pass
+    return "srv-" + uuid.uuid5(uuid.NAMESPACE_DNS, os.uname().nodename).hex[:24]
+
+
 def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "v2rayN/7.0"})
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "v2rayN/7.0", "x-hwid": hwid(), "x-device-os": "Linux",
+        "x-ver-os": os.uname().release, "x-device-model": "rest-test-bot server"})
     body = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace").strip()
     if "://" not in body:
         try:
@@ -148,7 +166,8 @@ def main():
             parsed = outbound(link)
         except Exception:
             parsed = None
-        if parsed:
+        # Заглушки провайдера («Поддержка: …», «Бот: …») идут на порт 1 — пропускаем.
+        if parsed and str(parsed[1].get("settings", {})).find("'port': 1}") == -1:
             candidates.append(parsed)
     print(f"В подписке ссылок: {len(links)}, поддерживаемых: {len(candidates)}")
     if not candidates:
