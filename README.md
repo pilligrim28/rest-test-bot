@@ -161,6 +161,9 @@ make docker-down   # остановка
 | `WEBHOOK_SECRET` | да, если вебхук | — | секрет, которым Telegram подписывает каждый запрос |
 | `WEBHOOK_LISTEN` | нет | `:8080` | адрес HTTP-сервера бота (HTTPS обеспечивает nginx/Caddy) |
 | `WEBHOOK_PATH` | нет | `/telegram/webhook` | путь обработчика; `/healthz` — проверка живости |
+| `BOTGATE_API_KEY` | нет | пусто | ключ `bg_live_...` прокси [BotGate](https://bot-gate.ru/docs) — работа без VPN; тогда `BOT_TOKEN` не нужен |
+| `BOTGATE_BOT_ID` | да, если BotGate | — | ID бота `bot_...` из карточки в кабинете BotGate |
+| `BOTGATE_WEBHOOK_SECRET` | да, если BotGate | — | `webhook_secret` из карточки: им BotGate подписывает пересылаемые сообщения |
 | `PRACTICE_URL` | нет | `https://t.me/restquiz_bot/practice` | ссылка на практику, если не задан `PRACTICE_AUDIO` |
 | `PRACTICE_AUDIO` | нет | `assets/practice.mp3` | аудиофайл практики: бот пришлёт его прямо в чат по кнопке практики |
 | `WELCOME_PHOTO`, `QUESTION_PHOTO`, `QUESTION_PHOTO_1…5` | нет | см. «Картинки» | картинки |

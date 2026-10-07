@@ -54,6 +54,14 @@ type Config struct {
 	WebhookPath string
 	// WebhookSecret — секрет для заголовка X-Telegram-Bot-Api-Secret-Token.
 	WebhookSecret string
+
+	// BotGate — прокси Telegram Bot API (https://bot-gate.ru/docs) для работы без VPN.
+	// Включается, когда задан BotGateKey. Обновления BotGate присылает на
+	// WEBHOOK_LISTEN + WEBHOOK_PATH, адрес вебхука задаётся в кабинете BotGate.
+	BotGateKey    string
+	BotGateBotID  string
+	BotGateSecret string
+	BotGateURL    string
 	// PracticeURL — ссылка на аудиопрактику; пусто — значение по умолчанию из internal/quiz.
 	PracticeURL string
 	// PracticeAudio — аудиофайл практики (путь, URL или file_id). Если задан,
@@ -111,7 +119,18 @@ func Load() (*Config, error) {
 		PracticeURL: firstNonEmpty(os.Getenv(envPracticeURL)),
 	}
 
-	if strings.TrimSpace(cfg.Token) == "" {
+	cfg.BotGateKey = firstNonEmpty(os.Getenv("BOTGATE_API_KEY"))
+	cfg.BotGateBotID = firstNonEmpty(os.Getenv("BOTGATE_BOT_ID"))
+	cfg.BotGateSecret = firstNonEmpty(os.Getenv("BOTGATE_WEBHOOK_SECRET"))
+	cfg.BotGateURL = firstNonEmpty(os.Getenv("BOTGATE_URL"))
+	if cfg.UseBotGate() {
+		if cfg.BotGateBotID == "" {
+			return nil, errors.New("для BotGate задайте BOTGATE_BOT_ID (вида bot_xxxxxxxxxxxx, есть в карточке бота)")
+		}
+		if cfg.BotGateSecret == "" {
+			return nil, errors.New("для BotGate задайте BOTGATE_WEBHOOK_SECRET (webhook_secret из карточки бота)")
+		}
+	} else if strings.TrimSpace(cfg.Token) == "" {
 		return nil, fmt.Errorf("не задан токен бота: установите %s", envToken)
 	}
 
@@ -198,12 +217,15 @@ func (c *Config) IsAdmin(id int64) bool {
 	return ok
 }
 
+// UseBotGate сообщает, что запросы к Telegram идут через прокси BotGate.
+func (c *Config) UseBotGate() bool { return c.BotGateKey != "" }
+
 // AdminCount возвращает число настроенных администраторов.
 func (c *Config) AdminCount() int { return len(c.AdminIDs) }
 
 // Validate проверяет конфигурацию на типичные ошибки запуска.
 func (c *Config) Validate() error {
-	if c.Token == "" {
+	if c.Token == "" && !c.UseBotGate() {
 		return errors.New("токен бота пуст")
 	}
 	if c.DataFile == "" {
