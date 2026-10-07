@@ -30,7 +30,12 @@ func main() {
 		quiz.PracticeURL = cfg.PracticeURL
 	}
 
-	api, err := telegramapi.New(cfg.Token)
+	var api *telegramapi.API
+	if cfg.UseBotGate() {
+		api, err = telegramapi.NewBotGate(cfg.BotGateURL, cfg.BotGateBotID, cfg.BotGateKey)
+	} else {
+		api, err = telegramapi.New(cfg.Token)
+	}
 	if err != nil {
 		log.Fatalf("[restquiz] %v", err)
 	}
@@ -78,6 +83,24 @@ func main() {
 			b.HandleUpdate(u, send)
 		}
 	}()
+
+	if cfg.UseBotGate() {
+		// BotGate: вебхук в Telegram настраивает сам BotGate (адрес задаётся в
+		// его кабинете), поэтому setWebhook/deleteWebhook не вызываем, а
+		// getUpdates BotGate блокирует. Просто принимаем пересланные обновления.
+		go func() {
+			h := telegramapi.BotGateWebhookHandler(cfg.BotGateSecret, updates)
+			if err := telegramapi.Serve(cfg.WebhookListen, cfg.WebhookPath, h, stop); err != nil {
+				log.Fatalf("[restquiz] сервер вебхука: %v", err)
+			}
+		}()
+		log.Printf("[restquiz] бот @%s работает через BotGate, жду обновления на %s%s (этот адрес должен быть доступен из интернета по https и указан в кабинете BotGate как Webhook URL)",
+			api.BotUsername(), cfg.WebhookListen, cfg.WebhookPath)
+		sig := waitSignal()
+		log.Printf("[restquiz] получен сигнал %s, останавливаюсь…", sig)
+		close(stop)
+		return
+	}
 
 	if cfg.WebhookURL != "" {
 		// Режим вебхука: HTTPS терминирует обратный прокси (nginx/Caddy),

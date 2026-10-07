@@ -142,7 +142,10 @@ func (b *Bot) sendResult(id int64, outcome quiz.Outcome, send Sender) {
 func (b *Bot) deliverPractice(id int64, st *state, send Sender) {
 	const title = "🎧 «Переключатель: 8 минут, чтобы перейти от дел к отдыху»"
 	if b.cfg.PracticeAudio != "" {
-		b.send(send, id, title+"\n\nУдобно сядьте и включите запись.", telegramapi.SendOptions{
+		// Telegram показывает подпись только под аудио, поэтому текст идёт
+		// отдельным сообщением перед файлом — так он оказывается над плеером.
+		b.reply(send, id, title+"\n\nУдобно сядьте и включите запись.")
+		b.send(send, id, "", telegramapi.SendOptions{
 			Audio:      b.cfg.PracticeAudio,
 			AudioTitle: "Переключатель: 8 минут, чтобы перейти от дел к отдыху",
 		})

@@ -2,8 +2,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,6 +56,14 @@ type Config struct {
 	WebhookPath string
 	// WebhookSecret — секрет для заголовка X-Telegram-Bot-Api-Secret-Token.
 	WebhookSecret string
+
+	// BotGate — прокси Telegram Bot API (https://bot-gate.ru/docs) для работы без VPN.
+	// Включается, когда задан BotGateKey. Обновления BotGate присылает на
+	// WEBHOOK_LISTEN + WEBHOOK_PATH, адрес вебхука задаётся в кабинете BotGate.
+	BotGateKey    string
+	BotGateBotID  string
+	BotGateSecret string
+	BotGateURL    string
 	// PracticeURL — ссылка на аудиопрактику; пусто — значение по умолчанию из internal/quiz.
 	PracticeURL string
 	// PracticeAudio — аудиофайл практики (путь, URL или file_id). Если задан,
@@ -111,7 +121,18 @@ func Load() (*Config, error) {
 		PracticeURL: firstNonEmpty(os.Getenv(envPracticeURL)),
 	}
 
-	if strings.TrimSpace(cfg.Token) == "" {
+	cfg.BotGateKey = firstNonEmpty(os.Getenv("BOTGATE_API_KEY"))
+	cfg.BotGateBotID = firstNonEmpty(os.Getenv("BOTGATE_BOT_ID"))
+	cfg.BotGateSecret = firstNonEmpty(os.Getenv("BOTGATE_WEBHOOK_SECRET"))
+	cfg.BotGateURL = firstNonEmpty(os.Getenv("BOTGATE_URL"))
+	if cfg.UseBotGate() {
+		if cfg.BotGateBotID == "" {
+			return nil, errors.New("для BotGate задайте BOTGATE_BOT_ID (вида bot_xxxxxxxxxxxx, есть в карточке бота)")
+		}
+		if cfg.BotGateSecret == "" {
+			return nil, errors.New("для BotGate задайте BOTGATE_WEBHOOK_SECRET (webhook_secret из карточки бота)")
+		}
+	} else if strings.TrimSpace(cfg.Token) == "" {
 		return nil, fmt.Errorf("не задан токен бота: установите %s", envToken)
 	}
 
@@ -139,7 +160,7 @@ func Load() (*Config, error) {
 
 	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"),
 		existingFile("assets/practice.mp3", "assets/practice.m4a", "assets/practice.ogg"))
-	cfg.WelcomePhoto = firstNonEmpty(os.Getenv("WELCOME_PHOTO"), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))
+	cfg.WelcomePhoto = firstNonEmpty(dropMissingAsset(os.Getenv("WELCOME_PHOTO")), dropMissingAsset(os.Getenv("WELCOME_PHOTO_URL")), existingFile("assets/welcome.jpg", "assets/welcome.png"))
 	common := firstNonEmpty(os.Getenv("QUESTION_PHOTO"))
 	cfg.QuestionPhotos = make([]string, QuestionCount)
 	for i := 1; i <= QuestionCount; i++ {
@@ -198,12 +219,15 @@ func (c *Config) IsAdmin(id int64) bool {
 	return ok
 }
 
+// UseBotGate сообщает, что запросы к Telegram идут через прокси BotGate.
+func (c *Config) UseBotGate() bool { return c.BotGateKey != "" }
+
 // AdminCount возвращает число настроенных администраторов.
 func (c *Config) AdminCount() int { return len(c.AdminIDs) }
 
 // Validate проверяет конфигурацию на типичные ошибки запуска.
 func (c *Config) Validate() error {
-	if c.Token == "" {
+	if c.Token == "" && !c.UseBotGate() {
 		return errors.New("токен бота пуст")
 	}
 	if c.DataFile == "" {
@@ -220,6 +244,17 @@ func existingFile(paths ...string) string {
 		}
 	}
 	return ""
+}
+
+// dropMissingAsset возвращает "" для пути внутри assets/, если такого файла нет.
+// Так старое значение WELCOME_PHOTO=assets/welcome.png не ломает приветствие,
+// когда картинку заменили на assets/welcome.jpg.
+func dropMissingAsset(v string) string {
+	v = strings.TrimSpace(v)
+	if strings.HasPrefix(filepath.ToSlash(v), "assets/") && existingFile(v) == "" {
+		return ""
+	}
+	return v
 }
 
 func parseBool(raw string) bool {
@@ -252,8 +287,16 @@ func loadDotEnv() {
 // applyDotEnv читает указанный файл и выставляет переменные через os.Setenv.
 // Возвращает true, если файл найден и успешно разобран.
 func applyDotEnv(path string) bool {
-	values, err := godotenv.Read(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
+		return false
+	}
+	// Блокнот Windows сохраняет UTF-8 с BOM — без этой правки godotenv
+	// не разбирает файл целиком, и бот «не видит» BOT_TOKEN.
+	raw = bytes.TrimPrefix(raw, []byte("\xEF\xBB\xBF"))
+	values, err := godotenv.Unmarshal(string(raw))
+	if err != nil {
+		log.Printf("[config] не удалось разобрать %s: %v", path, err)
 		return false
 	}
 	for key, value := range values {

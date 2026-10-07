@@ -1,6 +1,9 @@
 package telegramapi
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,5 +47,56 @@ func TestGroupMessagesIgnored(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/tg", strings.NewReader(body)))
 	if len(ch) != 0 {
 		t.Fatal("сообщения из групп обрабатываться не должны")
+	}
+}
+
+func signBotGate(secret, body string) string {
+	m := hmac.New(sha256.New, []byte(secret))
+	m.Write([]byte(body))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+func TestBotGateWebhookSignature(t *testing.T) {
+	ch := make(chan Update, 1)
+	h := BotGateWebhookHandler("gate", ch)
+
+	bad := httptest.NewRequest(http.MethodPost, "/tg", strings.NewReader(sampleUpdate))
+	bad.Header.Set(botGateSignatureHeader, signBotGate("other", sampleUpdate))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, bad)
+	if rec.Code != http.StatusForbidden || len(ch) != 0 {
+		t.Fatalf("неверная подпись: ожидал 403, получил %d", rec.Code)
+	}
+
+	ok := httptest.NewRequest(http.MethodPost, "/tg", strings.NewReader(sampleUpdate))
+	ok.Header.Set(botGateSignatureHeader, signBotGate("gate", sampleUpdate))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, ok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("верная подпись: код %d", rec.Code)
+	}
+	if u := <-ch; u.SenderID != 42 {
+		t.Fatalf("неверное обновление: %+v", u)
+	}
+}
+
+func TestBotGateClientUsesProxy(t *testing.T) {
+	var gotPath, gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":1,"is_bot":true,"first_name":"Bot","username":"rest_bot"}}`))
+	}))
+	defer srv.Close()
+
+	api, err := NewBotGate(srv.URL+"/api/v1/bots/", "bot_abc", "bg_live_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v1/bots/bot_abc/getMe" || gotAuth != "Bearer bg_live_test" {
+		t.Fatalf("запрос ушёл не туда: path=%q auth=%q", gotPath, gotAuth)
+	}
+	if api.BotUsername() != "rest_bot" {
+		t.Fatalf("username %q", api.BotUsername())
 	}
 }
