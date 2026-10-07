@@ -2,8 +2,10 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -158,7 +160,7 @@ func Load() (*Config, error) {
 
 	cfg.PracticeAudio = firstNonEmpty(os.Getenv("PRACTICE_AUDIO"),
 		existingFile("assets/practice.mp3", "assets/practice.m4a", "assets/practice.ogg"))
-	cfg.WelcomePhoto = firstNonEmpty(dropMissingAsset(os.Getenv("WELCOME_PHOTO")), os.Getenv("WELCOME_PHOTO_URL"), existingFile("assets/welcome.jpg", "assets/welcome.png"))
+	cfg.WelcomePhoto = firstNonEmpty(dropMissingAsset(os.Getenv("WELCOME_PHOTO")), dropMissingAsset(os.Getenv("WELCOME_PHOTO_URL")), existingFile("assets/welcome.jpg", "assets/welcome.png"))
 	common := firstNonEmpty(os.Getenv("QUESTION_PHOTO"))
 	cfg.QuestionPhotos = make([]string, QuestionCount)
 	for i := 1; i <= QuestionCount; i++ {
@@ -285,8 +287,16 @@ func loadDotEnv() {
 // applyDotEnv читает указанный файл и выставляет переменные через os.Setenv.
 // Возвращает true, если файл найден и успешно разобран.
 func applyDotEnv(path string) bool {
-	values, err := godotenv.Read(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
+		return false
+	}
+	// Блокнот Windows сохраняет UTF-8 с BOM — без этой правки godotenv
+	// не разбирает файл целиком, и бот «не видит» BOT_TOKEN.
+	raw = bytes.TrimPrefix(raw, []byte("\xEF\xBB\xBF"))
+	values, err := godotenv.Unmarshal(string(raw))
+	if err != nil {
+		log.Printf("[config] не удалось разобрать %s: %v", path, err)
 		return false
 	}
 	for key, value := range values {

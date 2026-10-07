@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -124,5 +126,16 @@ func TestLoadBotGateWithoutToken(t *testing.T) {
 	}
 	if !cfg.UseBotGate() || cfg.Validate() != nil {
 		t.Fatal("ожидал режим BotGate")
+	}
+}
+
+func TestDotEnvWithBOM(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte("\xEF\xBB\xBF\r\nBOM_TEST_TOKEN=1:A\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BOM_TEST_TOKEN", "")
+	if !applyDotEnv(path) || os.Getenv("BOM_TEST_TOKEN") != "1:A" {
+		t.Fatalf(".env с BOM не прочитан: %q", os.Getenv("BOM_TEST_TOKEN"))
 	}
 }
