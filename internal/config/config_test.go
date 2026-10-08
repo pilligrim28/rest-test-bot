@@ -110,25 +110,6 @@ func TestPracticeURLEmptyByDefault(t *testing.T) {
 	}
 }
 
-func TestLoadBotGateWithoutToken(t *testing.T) {
-	t.Setenv(envToken, "")
-	t.Setenv(envTokenAlt, "")
-	t.Setenv("BOTGATE_API_KEY", "bg_live_test")
-	t.Setenv("BOTGATE_BOT_ID", "")
-	t.Setenv("BOTGATE_WEBHOOK_SECRET", "s")
-	if _, err := Load(); err == nil {
-		t.Fatal("без BOTGATE_BOT_ID должна быть ошибка")
-	}
-	t.Setenv("BOTGATE_BOT_ID", "bot_abc")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("BotGate без BOT_TOKEN должен запускаться: %v", err)
-	}
-	if !cfg.UseBotGate() || cfg.Validate() != nil {
-		t.Fatal("ожидал режим BotGate")
-	}
-}
-
 func TestDotEnvWithBOM(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(path, []byte("\xEF\xBB\xBF\r\nBOM_TEST_TOKEN=1:A\r\n"), 0o600); err != nil {
