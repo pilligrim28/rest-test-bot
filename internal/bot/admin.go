@@ -132,6 +132,10 @@ func (b *Bot) runBroadcast(adminID int64, draft *broadcastDraft, send Sender) {
 
 	recipients := b.store.Subscribers()
 	text := draft.text + unsubscribeFooter
+	// Сначала сообщение «Отправляю…», потом запуск: иначе при малом числе
+	// получателей отчёт «Рассылка завершена» мог прийти раньше него.
+	b.reply(send, adminID, fmt.Sprintf("Отправляю %d сообщений — займёт примерно %s. Результат пришлю сюда.",
+		len(recipients), (time.Duration(len(recipients))*b.cfg.BroadcastDelay).Round(time.Second)))
 	go func() {
 		var sent, failed int
 		for _, rid := range recipients {
@@ -145,6 +149,4 @@ func (b *Bot) runBroadcast(adminID int64, draft *broadcastDraft, send Sender) {
 		}
 		b.reply(send, adminID, fmt.Sprintf("Рассылка завершена: доставлено %d, ошибок %d (из %d).", sent, failed, len(recipients)))
 	}()
-	b.reply(send, adminID, fmt.Sprintf("Отправляю %d сообщений — займёт примерно %s. Результат пришлю сюда.",
-		len(recipients), (time.Duration(len(recipients))*b.cfg.BroadcastDelay).Round(time.Second)))
 }
