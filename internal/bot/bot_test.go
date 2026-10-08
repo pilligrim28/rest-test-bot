@@ -5,8 +5,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pilligrim28/rest-test-bot/internal/config"
+	"github.com/pilligrim28/rest-test-bot/internal/quiz"
 	"github.com/pilligrim28/rest-test-bot/internal/store"
 	"github.com/pilligrim28/rest-test-bot/internal/telegramapi"
 )
@@ -115,7 +117,7 @@ func TestFullQuizConsentFlow(t *testing.T) {
 
 	// После результата никаких данных не запрашиваем — только кнопка практики.
 	last := fs.last()
-	if !strings.Contains(last.text, "Ваш результат") || last.opts.InlineKeyboard[0][1] != "practice" {
+	if !strings.Contains(last.text, "Твой результат") || last.opts.InlineKeyboard[0][1] != "practice" {
 		t.Fatalf("ожидал результат с кнопкой практики, получил: %q", last.text)
 	}
 	if st.TestsCompleted() != 1 {
@@ -288,7 +290,7 @@ func TestTextAnswersSupported(t *testing.T) {
 	b.HandleUpdate(text(id, "Пропустить"), fs.send)
 	b.HandleUpdate(text(id, "3"), fs.send)
 
-	if !strings.Contains(fs.last().text, "Ваш результат") {
+	if !strings.Contains(fs.last().text, "Твой результат") {
 		t.Errorf("ожидал результат теста, получил %q", fs.last().text)
 	}
 	if st.Count() != 0 {
@@ -490,5 +492,29 @@ func TestHelpSeparatesAdmin(t *testing.T) {
 	b.HandleUpdate(text(222, "/broadcast"), fs.send)
 	if strings.Contains(fs.last().text, "Рассылка") {
 		t.Error("пользователь не должен запускать рассылку")
+	}
+}
+
+// Тексты результатов должны помещаться в одно сообщение Telegram (4096 символов),
+// включая случай ничьей, когда выводятся два описания.
+func TestResultTextsFitTelegramLimit(t *testing.T) {
+	cats := quiz.AllCategories
+	for i := range cats {
+		for j := i + 1; j < len(cats); j++ {
+			var n int
+			for _, c := range []quiz.Category{cats[i], cats[j]} {
+				cp := quiz.Results[c]
+				n += utf8.RuneCountInString(cp.Title) + 10
+				for _, p := range cp.Body {
+					n += utf8.RuneCountInString(p) + 2
+				}
+			}
+			for _, l := range quiz.TieCopy.Lead {
+				n += utf8.RuneCountInString(l) + 2
+			}
+			if n > 4000 {
+				t.Errorf("ничья %s+%s: %d символов — больше лимита сообщения", cats[i], cats[j], n)
+			}
+		}
 	}
 }
