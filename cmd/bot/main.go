@@ -73,6 +73,8 @@ func main() {
 	updates := make(chan telegramapi.Update, 100)
 	stop := make(chan struct{})
 
+	go b.RunScheduler(send, stop)
+
 	go func() {
 		for u := range updates {
 			b.HandleUpdate(u, send)

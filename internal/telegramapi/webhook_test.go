@@ -1,6 +1,7 @@
 package telegramapi
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,5 +45,16 @@ func TestGroupMessagesIgnored(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/tg", strings.NewReader(body)))
 	if len(ch) != 0 {
 		t.Fatal("сообщения из групп обрабатываться не должны")
+	}
+}
+
+func TestConflictKinds(t *testing.T) {
+	other := errors.New("Conflict: terminated by other getUpdates request; make sure that only one bot instance is running")
+	hook := errors.New("Conflict: can't use getUpdates method while webhook is active; use deleteWebhook to delete the webhook first")
+	if !isOtherInstance(other) || isOtherInstance(hook) {
+		t.Fatal("вторую копию бота надо отличать от активного вебхука")
+	}
+	if !isConflict(hook) {
+		t.Fatal("активный вебхук — это конфликт")
 	}
 }

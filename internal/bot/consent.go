@@ -154,6 +154,9 @@ func (b *Bot) showMyData(id int64, send Sender) {
 // forget — отзыв согласия: профиль удаляется сразу (ст. 21 152-ФЗ).
 func (b *Bot) forget(id int64, send Sender) {
 	b.clearState(id)
+	if err := b.store.DeleteFollowup(id); err != nil {
+		log.Printf("[bot] удаление напоминаний %d: %v", id, err)
+	}
 	if _, ok := b.store.Get(id); !ok {
 		b.send(send, id, "Я ничего о вас не храню — удалять нечего.", telegramapi.SendOptions{RemoveKeyboard: true})
 		return

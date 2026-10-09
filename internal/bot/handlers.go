@@ -139,6 +139,16 @@ func (b *Bot) handleCallback(u telegramapi.Update, send Sender) {
 	case data == callbackPDNo:
 		b.clearState(u.SenderID)
 		b.reply(send, u.SenderID, "Хорошо, ничего не сохраняю. Без согласия я не могу присылать материалы, но практика остаётся у вас. Передумаете — /start.")
+	case data == callbackListenYes:
+		b.onListenYes(u.SenderID, send)
+	case data == callbackListenNo:
+		b.onListenNo(u.SenderID, send)
+	case data == callbackAgree:
+		b.onAgree(u, send)
+	case data == callbackAgreement:
+		b.showAgreement(u.SenderID, send)
+	case data == callbackDecline:
+		b.onDecline(u.SenderID, send)
 	case data == callbackConsentInfo:
 		b.showConsentSummary(u.SenderID, send, false)
 	case data == callbackConsentShow:

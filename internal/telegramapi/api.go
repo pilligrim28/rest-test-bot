@@ -338,6 +338,15 @@ func (a *API) PollUpdates(updates chan Update, stop <-chan struct{}) {
 		cfg := tgbotapi.UpdateConfig{Offset: offset, Limit: 100, Timeout: 30}
 		list, err := a.bot.GetUpdates(cfg)
 		if err != nil {
+			if isOtherInstance(err) {
+				// Тот же токен опрашивает другая копия бота — вебхук тут ни при чём.
+				log.Printf("[telegram] этого бота запустили ещё где-то (409: other getUpdates request): остановите вторую копию — иначе сообщения достаются то одной, то другой")
+				if waitOrStop(stop, 5*time.Second) {
+					close(updates)
+					return
+				}
+				continue
+			}
 			if isConflict(err) {
 				// Кто-то снова поставил вебхук — чиним и продолжаем без паузы.
 				log.Printf("[telegram] вебхук активен, удаляю его автоматически…")
@@ -448,6 +457,12 @@ func isConflict(err error) bool {
 		return true
 	}
 	return strings.Contains(err.Error(), "Conflict")
+}
+
+// isOtherInstance — 409 из-за того, что getUpdates с тем же токеном вызывает
+// другая запущенная копия бота («terminated by other getUpdates request»).
+func isOtherInstance(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "other getUpdates")
 }
 
 // waitOrStop спит d или выходит раньше при закрытии stop. Возвращает true, если пора завершаться.

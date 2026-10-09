@@ -160,29 +160,15 @@ func (b *Bot) deliverPractice(id int64, st *state, send Sender) {
 		b.reply(send, id, practiceText+"\n\n"+quiz.PracticeURL)
 	}
 
-	// Уже подписан — согласие повторно не спрашиваем, только обновляем результат.
-	if p, ok := b.store.Get(id); ok && p.Subscribed() {
-		if st != nil && st.headline != "" {
-			if _, err := b.store.UpdateResult(id, st.scores, st.headline); err != nil {
-				log.Printf("[bot] обновление результата %d: %v", id, err)
-			}
+	// Уже подписан — обновляем результат, согласие повторно не спрашиваем.
+	if p, ok := b.store.Get(id); ok && p.Subscribed() && st != nil && st.headline != "" {
+		if _, err := b.store.UpdateResult(id, st.scores, st.headline); err != nil {
+			log.Printf("[bot] обновление результата %d: %v", id, err)
 		}
-		b.clearState(id)
-		return
 	}
-	if st == nil {
-		st = &state{}
-		b.setState(id, st)
-	}
-	st.stage = stageOffer
-	b.send(send, id,
-		"Если захотите, я могу иногда присылать сюда новые короткие практики и материалы про вечерний отдых. "+
-			"Это необязательно — практика уже ваша.\n\nПрисылать?",
-		telegramapi.SendOptions{InlineKeyboard: [][]string{
-			{"✅ Да, присылайте", callbackSubYes},
-			{"Нет, спасибо", callbackSubNo},
-			{"🔒 Как я обращаюсь с данными", callbackConsentInfo},
-		}})
+	// Через час спросим, получилось ли прослушать (см. followup.go).
+	b.scheduleListenCheck(id, st)
+	b.clearState(id)
 }
 
 // categoryIndex — номер варианта ответа (0..2), соответствующего категории.

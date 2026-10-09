@@ -165,7 +165,10 @@ func Load() (*Config, error) {
 	cfg.OperatorCity = firstNonEmpty(os.Getenv("OPERATOR_CITY"))
 	cfg.OperatorContact = firstNonEmpty(os.Getenv("OPERATOR_CONTACT"))
 	cfg.PolicyURL = firstNonEmpty(os.Getenv("POLICY_URL"))
-	cfg.CollectPhone = parseBool(os.Getenv("COLLECT_PHONE"))
+	cfg.CollectPhone = true
+	if raw := strings.TrimSpace(os.Getenv("COLLECT_PHONE")); raw != "" {
+		cfg.CollectPhone = parseBool(raw)
+	}
 
 	retentionDays := defaultRetentionDays
 	if raw := strings.TrimSpace(os.Getenv("DATA_RETENTION_DAYS")); raw != "" {

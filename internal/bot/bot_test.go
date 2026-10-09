@@ -102,11 +102,13 @@ func runQuiz(t *testing.T, b *Bot, fs *fakeSender, id int64, choices []int) {
 	}
 }
 
-// subscribe проходит сценарий «практика → подписка → согласие».
+// subscribe проходит сценарий «практика → „Да, прослушала“ → предложение → Согласен».
 func subscribe(b *Bot, fs *fakeSender, id int64) {
 	b.HandleUpdate(cb(id, "practice"), fs.send)
-	b.HandleUpdate(cb(id, "sub_yes"), fs.send)
-	b.HandleUpdate(cb(id, "pd_yes"), fs.send)
+	b.ProcessDue(time.Now().Add(2*time.Hour), fs.send)
+	b.HandleUpdate(cb(id, "listen_yes"), fs.send)
+	b.ProcessDue(time.Now().Add(2*time.Hour), fs.send)
+	b.HandleUpdate(cb(id, "agree_all"), fs.send)
 }
 
 func TestFullQuizConsentFlow(t *testing.T) {
@@ -124,27 +126,48 @@ func TestFullQuizConsentFlow(t *testing.T) {
 		t.Errorf("счётчик тестов = %d, хотим 1", st.TestsCompleted())
 	}
 
-	// Практика выдаётся без согласия, затем — предложение подписки.
+	// Практика выдаётся без согласия, сразу ничего больше не предлагаем.
 	b.HandleUpdate(cb(id, "practice"), fs.send)
-	if !strings.Contains(fs.sent[len(fs.sent)-2].text, "Переключатель") {
-		t.Fatalf("ожидал практику, получил %q", fs.sent[len(fs.sent)-2].text)
+	if !strings.Contains(fs.last().text, "Переключатель") {
+		t.Fatalf("ожидал практику, получил %q", fs.last().text)
 	}
-	if !strings.Contains(fs.last().text, "Присылать?") {
-		t.Fatalf("ожидал предложение подписки, получил %q", fs.last().text)
+	n := len(fs.sent)
+
+	// Через 59 минут — тишина, через час — вопрос «Получилось прослушать?».
+	b.ProcessDue(time.Now().Add(59*time.Minute), fs.send)
+	if len(fs.sent) != n {
+		t.Fatalf("вопрос пришёл раньше часа: %q", fs.last().text)
+	}
+	b.ProcessDue(time.Now().Add(61*time.Minute), fs.send)
+	if !strings.Contains(fs.last().text, "Получилось прослушать") || !hasCallback(fs.last(), "listen_yes") || !hasCallback(fs.last(), "listen_no") {
+		t.Fatalf("ожидал вопрос с кнопками Да/Нет, получил %+v", fs.last())
+	}
+
+	// «Да» → через час предложение с кнопками «Согласен» и «Пользовательское соглашение».
+	b.HandleUpdate(cb(id, "listen_yes"), fs.send)
+	b.ProcessDue(time.Now().Add(30*time.Minute), fs.send)
+	if hasCallback(fs.last(), "agree_all") {
+		t.Fatal("предложение подписки пришло раньше часа")
+	}
+	b.ProcessDue(time.Now().Add(61*time.Minute), fs.send)
+	offer := fs.last()
+	if !hasCallback(offer, "agree_all") || !hasCallback(offer, "agreement") || !hasCallback(offer, "decline_all") {
+		t.Fatalf("ожидал предложение с кнопками, получил %+v", offer)
+	}
+	if strings.Contains(offer.text, "СОГЛАСИЕ НА ОБРАБОТКУ") {
+		t.Fatal("соглашение должно показываться только по кнопке")
 	}
 	if st.Count() != 0 {
 		t.Fatal("до согласия ничего сохраняться не должно")
 	}
 
-	b.HandleUpdate(cb(id, "sub_yes"), fs.send)
-	if !strings.Contains(fs.last().text, "Согласие на обработку персональных данных") {
-		t.Fatalf("ожидал отдельное согласие на ПДн, получил %q", fs.last().text)
-	}
-	if st.Count() != 0 {
-		t.Fatal("одного согласия на рассылку недостаточно для сохранения")
+	// Соглашение — по кнопке, под ним снова «Согласен».
+	b.HandleUpdate(cb(id, "agreement"), fs.send)
+	if !strings.Contains(fs.sent[len(fs.sent)-2].text, "СОГЛАСИЕ НА ОБРАБОТКУ") || !hasCallback(fs.last(), "agree_all") {
+		t.Fatalf("ожидал текст соглашения и кнопку «Согласен», получил %q", fs.last().text)
 	}
 
-	b.HandleUpdate(cb(id, "pd_yes"), fs.send)
+	b.HandleUpdate(cb(id, "agree_all"), fs.send)
 	p, ok := st.Get(id)
 	if !ok {
 		t.Fatal("профиль не сохранён после согласия")
@@ -457,8 +480,8 @@ func TestButtonsLayout(t *testing.T) {
 	}
 	runQuiz(t, b, fs, 1, []int{2, 2, 2, 0, 1})
 	b.HandleUpdate(cb(1, "practice"), fs.send)
-	if !hasCallback(fs.last(), "consent_info") {
-		t.Error("на последнем экране должна быть кнопка «Как я обращаюсь с данными»")
+	if len(fs.last().opts.InlineKeyboard) != 0 {
+		t.Error("после практики сразу ничего не предлагаем — вопрос придёт через час")
 	}
 }
 
@@ -470,7 +493,7 @@ func TestPracticeAudioSent(t *testing.T) {
 		t.Fatalf("ожидал кнопку «Начать свою паузу сейчас», получил %v", fs.last().opts.InlineKeyboard)
 	}
 	b.HandleUpdate(cb(1, "practice"), fs.send)
-	intro, audio := fs.sent[len(fs.sent)-3], fs.sent[len(fs.sent)-2]
+	intro, audio := fs.sent[len(fs.sent)-2], fs.sent[len(fs.sent)-1]
 	if !strings.Contains(intro.text, "Переключатель") || intro.opts.Audio != "" {
 		t.Fatalf("перед аудио должен идти текст: %+v", intro)
 	}
@@ -516,5 +539,93 @@ func TestResultTextsFitTelegramLimit(t *testing.T) {
 				t.Errorf("ничья %s+%s: %d символов — больше лимита сообщения", cats[i], cats[j], n)
 			}
 		}
+	}
+}
+
+func TestListenNoReminders(t *testing.T) {
+	b, st, fs := newTestBot(t)
+	const id int64 = 77
+	runQuiz(t, b, fs, id, []int{0, 0, 0, 1, 2})
+	b.HandleUpdate(cb(id, "practice"), fs.send)
+	b.ProcessDue(time.Now().Add(time.Hour+time.Minute), fs.send)
+	b.HandleUpdate(cb(id, "listen_no"), fs.send)
+
+	count := func() int {
+		n := 0
+		for _, m := range fs.sent {
+			if strings.Contains(m.text, "Напоминаю про практику") {
+				n++
+			}
+		}
+		return n
+	}
+	now := time.Now()
+	b.ProcessDue(now.Add(5*time.Hour), fs.send)
+	if count() != 0 {
+		t.Fatal("напоминание пришло раньше 6 часов")
+	}
+	b.ProcessDue(now.Add(6*time.Hour+time.Minute), fs.send)
+	if count() != 1 || !hasCallback(fs.last(), "listen_yes") {
+		t.Fatalf("ожидал первое напоминание через 6 ч с кнопками, получил %+v", fs.last())
+	}
+	b.ProcessDue(now.Add(12*time.Hour), fs.send)
+	if count() != 1 {
+		t.Fatal("лишнее напоминание")
+	}
+	b.ProcessDue(now.Add(24*time.Hour+time.Minute), fs.send)
+	if count() != 2 {
+		t.Fatalf("ожидал второе напоминание через сутки, напоминаний: %d", count())
+	}
+	b.ProcessDue(now.Add(72*time.Hour), fs.send)
+	if count() != 2 {
+		t.Fatal("после суток напоминаний больше быть не должно")
+	}
+
+	// «Да» после напоминания — через час предложение подписки.
+	b.HandleUpdate(cb(id, "listen_yes"), fs.send)
+	b.ProcessDue(time.Now().Add(61*time.Minute), fs.send)
+	if !hasCallback(fs.last(), "agree_all") {
+		t.Fatalf("ожидал предложение подписки, получил %q", fs.last().text)
+	}
+	b.HandleUpdate(cb(id, "decline_all"), fs.send)
+	if _, ok := st.GetFollowup(id); ok || st.Count() != 0 {
+		t.Fatal("после отказа не должно оставаться ни профиля, ни напоминаний")
+	}
+}
+
+func TestFollowupSurvivesRestart(t *testing.T) {
+	b, st, fs := newTestBot(t)
+	const id int64 = 78
+	runQuiz(t, b, fs, id, []int{0, 0, 0, 1, 2})
+	b.HandleUpdate(cb(id, "practice"), fs.send)
+
+	// «Перезапуск»: новое хранилище из того же файла, новый бот.
+	st2, err := store.New(b.cfg.DataFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = st
+	b2 := New(b.cfg, st2, nil)
+	fs2 := &fakeSender{}
+	b2.ProcessDue(time.Now().Add(61*time.Minute), fs2.send)
+	if !strings.Contains(fs2.last().text, "Получилось прослушать") {
+		t.Fatalf("после перезапуска вопрос должен прийти, получил %q", fs2.last().text)
+	}
+	b2.HandleUpdate(cb(id, "listen_yes"), fs2.send)
+	b2.ProcessDue(time.Now().Add(61*time.Minute), fs2.send)
+	b2.HandleUpdate(cb(id, "agree_all"), fs2.send)
+	p, ok := st2.Get(id)
+	if !ok || p.Headline == "" || !p.Subscribed() {
+		t.Fatalf("результат теста должен сохраниться в профиль после перезапуска: %+v", p)
+	}
+}
+
+func TestForgetRemovesFollowup(t *testing.T) {
+	b, st, fs := newTestBot(t)
+	runQuiz(t, b, fs, 79, []int{0, 0, 0, 1, 2})
+	b.HandleUpdate(cb(79, "practice"), fs.send)
+	b.HandleUpdate(text(79, "/forget"), fs.send)
+	if _, ok := st.GetFollowup(79); ok {
+		t.Fatal("/forget должен удалять и запланированные напоминания")
 	}
 }

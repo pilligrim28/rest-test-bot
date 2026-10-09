@@ -57,11 +57,13 @@ type Store struct {
 	profiles map[int64]*Profile
 	// testsCompleted — обезличенный счётчик завершённых тестов.
 	testsCompleted int
+	// followups — отложенные сообщения после практики (см. followups.go).
+	followups map[int64]*Followup
 }
 
 // New создаёт хранилище и загружает существующий файл, если он есть.
 func New(path string) (*Store, error) {
-	s := &Store{path: path, profiles: make(map[int64]*Profile)}
+	s := &Store{path: path, profiles: make(map[int64]*Profile), followups: make(map[int64]*Followup)}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -230,6 +232,11 @@ func (s *Store) load() error {
 		s.profiles[id] = p
 	}
 	s.testsCompleted = payload.TestsCompleted
+	for id, f := range payload.Followups {
+		if f != nil {
+			s.followups[id] = f
+		}
+	}
 	// Поле opted_in из старых версий (ID отказавшихся) намеренно не читается:
 	// при следующей записи оно исчезнет из файла.
 	return nil
@@ -246,6 +253,7 @@ func (s *Store) persistLocked() error {
 		UpdatedAt:      time.Now().UTC(),
 		TestsCompleted: s.testsCompleted,
 		Profiles:       s.profiles,
+		Followups:      s.followups,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -259,7 +267,8 @@ func (s *Store) persistLocked() error {
 }
 
 type fileFormat struct {
-	UpdatedAt      time.Time          `json:"updated_at"`
-	TestsCompleted int                `json:"tests_completed"`
-	Profiles       map[int64]*Profile `json:"profiles"`
+	UpdatedAt      time.Time           `json:"updated_at"`
+	TestsCompleted int                 `json:"tests_completed"`
+	Profiles       map[int64]*Profile  `json:"profiles"`
+	Followups      map[int64]*Followup `json:"followups,omitempty"`
 }
